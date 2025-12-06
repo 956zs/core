@@ -131,8 +131,15 @@ export class AiSummaryService {
         return doc
       }
     } catch (error) {
+      // 嘗試獲取更詳細的錯誤信息
+      const errorDetails = {
+        message: error.message,
+        cause: error.cause?.message || error.cause,
+        text: error.text, // AI SDK NoObjectGeneratedError 會包含原始響應
+        responseBody: error.response?.body,
+      }
       this.logger.error(
-        `OpenAI 在处理文章 ${articleId} 时出错：${error.message}`,
+        `OpenAI 在处理文章 ${articleId} 时出错：${JSON.stringify(errorDetails)}`,
       )
 
       console.error(error)
