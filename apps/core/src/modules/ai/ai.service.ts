@@ -33,6 +33,8 @@ export class AiService {
     } = await this.configService.waitForConfigReady()
 
     const provider = await this.getOpenAiProvider()
-    return provider(openAiPreferredModel)
+    // 使用 .chat() 強制使用 Chat Completions API
+    // AI SDK 5.0 默認使用 Responses API，但第三方 OpenAI 兼容服務不支持
+    return provider.chat(openAiPreferredModel)
   }
 }
