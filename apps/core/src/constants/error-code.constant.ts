@@ -51,12 +51,11 @@ export enum ErrorCodeEnum {
   // biz - disabled/not enabled (400/403)
   LinkDisabled = 13000,
   SubpathLinkDisabled = 13001,
-  AlgoliaNotEnabled = 13002,
-  AlgoliaNotConfigured = 13003,
   BackupNotEnabled = 13004,
   SubscribeNotEnabled = 13005,
   PasswordLoginDisabled = 13006,
   AIProviderNotEnabled = 13007,
+  ImageStorageNotConfigured = 13008,
 
   // biz - forbidden (403)
   NoteForbidden = 14000,
@@ -203,13 +202,15 @@ export const ErrorCode = Object.freeze<Record<ErrorCodeEnum, [string, number]>>(
       '管理员当前禁用了子路径友链申请',
       422,
     ],
-    [ErrorCodeEnum.AlgoliaNotEnabled]: ['Algolia 未开启', 400],
-    [ErrorCodeEnum.AlgoliaNotConfigured]: ['Algolia 未配置', 400],
     [ErrorCodeEnum.BackupNotEnabled]: ['请先在设置中开启备份功能', 400],
     [ErrorCodeEnum.SubscribeNotEnabled]: ['订阅功能未开启', 400],
     [ErrorCodeEnum.PasswordLoginDisabled]: ['密码登录已禁用', 400],
     [ErrorCodeEnum.AIProviderNotEnabled]: [
       '没有配置启用的 AI Provider，无法启用 AI 评论审核',
+      400,
+    ],
+    [ErrorCodeEnum.ImageStorageNotConfigured]: [
+      'S3 图床未配置或配置不完整',
       400,
     ],
 

@@ -1,38 +1,226 @@
-# Mix Space Core
+<h1 align="center">MX Space Core</h1>
 
-本项目使用 Monorepo 进行管理。
+<p align="center">
+  AI-powered CMS Core for personal blogs, creator homepages & content websites.
+</p>
 
-- [core](./apps/core): Server Core 主程序
-- [api-client](./packages/api-client)：适用于前端的 API client 
-- [webhook](./packages/webhook): Webhook SDK
+<p align="center">
+  <a href="https://github.com/mx-space/core/releases"><img src="https://img.shields.io/github/v/release/mx-space/core?style=flat-square" alt="Release" /></a>
+  <a href="https://github.com/mx-space/core/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/mx-space/core/ci.yml?style=flat-square&label=CI" alt="CI" /></a>
+  <a href="https://github.com/mx-space/core/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-AGPLv3%20%2B%20MIT-blue?style=flat-square" alt="License" /></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D22-brightgreen?style=flat-square" alt="Node.js" /></a>
+  <a href="https://hub.docker.com/r/innei/mx-server"><img src="https://img.shields.io/docker/pulls/innei/mx-server?style=flat-square" alt="Docker Pulls" /></a>
+</p>
 
-## 环境要求
+---
 
-- **Node.js**: >= 22（仓库根目录提供了 `.nvmrc`）
-- **pnpm**: 使用 Corepack（推荐）  
-  - 启用：`corepack enable`
-  - 安装依赖：`pnpm i`
+## Overview
 
-## 开发
+MX Space Core is a headless CMS server built with **NestJS**, **MongoDB**, and **Redis**. Beyond standard blog features (posts, pages, notes, comments, categories, feeds, search), it ships with a full AI content workflow — summary generation, multi-language translation, comment moderation, and writing assistance — powered by pluggable LLM providers.
 
-在仓库根目录执行：
+### Key Features
 
-- `pnpm dev`：启动 core 开发服务
-- `pnpm build`：构建 core
-- `pnpm bundle`：打 bundle（用于发布/部署）
-- `pnpm test`：运行测试
-- `pnpm lint`：运行 ESLint
+| Category | Capabilities |
+|----------|-------------|
+| **Content Management** | Posts, notes, pages, drafts, categories, topics, comments, snippets, projects, friend links, subscriptions |
+| **AI Workflow** | Summary generation, multi-language translation, comment moderation, writing assistance, streaming responses |
+| **LLM Providers** | OpenAI, OpenAI-compatible, Anthropic, OpenRouter |
+| **Real-time** | WebSocket via Socket.IO with Redis adapter for multi-instance broadcast |
+| **Distribution** | RSS/Atom feeds, sitemap, local search, aggregate API |
+| **Auth** | JWT sessions, passkeys, OAuth, API keys (via better-auth) |
+| **Deployment** | Docker (multi-arch), PM2, standalone binary |
 
-## 升级指南
+## Tech Stack
 
-从 v9 升级到 v10 涉及鉴权体系重构，属于 **breaking change**。
+- **Runtime**: Node.js >= 22 + TypeScript 5.9
+- **Framework**: NestJS 11 + Fastify
+- **Database**: MongoDB 7 (Mongoose / TypeGoose)
+- **Cache**: Redis (ioredis)
+- **Validation**: Zod 4
+- **WebSocket**: Socket.IO + Redis Emitter
+- **AI**: OpenAI SDK, Anthropic SDK
+- **Editor**: Lexical (via @haklex/rich-headless)
+- **Auth**: better-auth (session, passkey, API key)
+- **Testing**: Vitest + in-memory MongoDB/Redis
 
-详细升级指南请查看 **[Upgrading to v10](./docs/migrations/v10.md)**
+## Monorepo Structure
 
-# 许可
+```
+mx-core/
+├── apps/
+│   └── core/                 # Main server application (NestJS)
+├── packages/
+│   ├── api-client/           # @mx-space/api-client — SDK for frontend & third-party clients
+│   └── webhook/              # @mx-space/webhook — Webhook integration SDK
+├── docker-compose.yml        # Development stack (Mongo + Redis)
+├── dockerfile                # Multi-stage production build
+└── docker-compose.server.yml # Production deployment template
+```
 
-此项目在 `apps/` 目录下的所有文件均使用 GNU Affero General Public License v3.0 (AGPLv3) with Additional Terms (ADDITIONAL_TERMS) 许可。
+### Core Architecture (`apps/core/src/`)
 
-其他部分使用 MIT License 许可。
+```
+src/
+├── modules/          # 44 business modules
+│   ├── ai/           #   AI summary, translation, writer, task queue
+│   ├── auth/         #   JWT, OAuth, passkey, API key
+│   ├── post/         #   Blog posts
+│   ├── note/         #   Short notes with topic support
+│   ├── comment/      #   Nested comments + AI moderation
+│   ├── configs/      #   Runtime configuration
+│   ├── webhook/      #   Event dispatch to external services
+│   ├── serverless/   #   User-defined serverless functions
+│   └── ...           #   page, draft, category, topic, feed, search, etc.
+├── processors/       # Infrastructure services
+│   ├── database/     #   MongoDB connection + model registry
+│   ├── redis/        #   Cache, pub/sub, emitter
+│   ├── gateway/      #   WebSocket (admin, web, shared namespaces)
+│   ├── task-queue/   #   Distributed job queue (Redis + Lua)
+│   └── helper/       #   Email, image, JWT, Lexical, URL builder, etc.
+├── common/           # Guards, interceptors, decorators, filters, pipes
+├── constants/        # Business events, cache keys, error codes
+├── transformers/     # Response transformation (snake_case, pagination)
+├── migration/        # Versioned DB migrations (v2 → v10)
+└── utils/            # 34 utility modules
+```
 
-详情请查看 [LICENSE](./LICENSE) 和 [ADDITIONAL_TERMS](./ADDITIONAL_TERMS.md)。
+## Quick Start
+
+### Prerequisites
+
+| Dependency | Version |
+|-----------|---------|
+| Node.js | >= 22 |
+| pnpm | Latest (via Corepack) |
+| MongoDB | 7.x |
+| Redis | 7.x |
+
+### Local Development
+
+```bash
+# Enable Corepack for pnpm
+corepack enable
+
+# Install dependencies
+pnpm install
+
+# Start MongoDB + Redis (via Docker)
+docker compose up -d mongo redis
+
+# Start dev server (port 2333)
+pnpm dev
+```
+
+The API is available at `http://localhost:2333`. In development mode, routes have no `/api/v2` prefix.
+
+### Docker Deployment
+
+The fastest way to get a production instance running:
+
+```bash
+# Clone and enter the project
+git clone https://github.com/mx-space/core.git && cd core
+
+# Edit environment variables
+cp docker-compose.server.yml docker-compose.prod.yml
+# Edit docker-compose.prod.yml — set JWT_SECRET, ALLOWED_ORIGINS, etc.
+
+# Start all services
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Or use the prebuilt image directly:
+
+```bash
+docker pull innei/mx-server:latest
+```
+
+The image supports `linux/amd64` and `linux/arm64`.
+
+## Available Commands
+
+Run from the repository root:
+
+| Command | Description |
+|---------|-------------|
+| `pnpm dev` | Start development server (watch mode) |
+| `pnpm build` | Build the core application |
+| `pnpm bundle` | Create production bundle (tsdown) |
+| `pnpm test` | Run test suite (Vitest) |
+| `pnpm lint` | Run ESLint with auto-fix |
+| `pnpm typecheck` | TypeScript type checking |
+| `pnpm format` | Format code with Prettier |
+
+### Running Tests
+
+```bash
+# Run all tests
+pnpm test
+
+# Run a specific test file
+pnpm test -- test/src/modules/user/user.service.spec.ts
+
+# Run tests matching a pattern
+pnpm test -- --testNamePattern="should create user"
+
+# Watch mode
+pnpm -C apps/core run test:watch
+```
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `JWT_SECRET` | Secret for JWT signing | Required |
+| `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | — |
+| `DB_HOST` | MongoDB host | `localhost` |
+| `REDIS_HOST` | Redis host | `localhost` |
+| `REDIS_PORT` | Redis port | `6379` |
+| `REDIS_PASSWORD` | Redis password | — |
+| `MONGO_CONNECTION` | Full MongoDB connection string (overrides DB_HOST) | — |
+| `ENCRYPT_ENABLE` | Enable field encryption | `false` |
+| `ENCRYPT_KEY` | 64-char hex encryption key | — |
+| `THROTTLE_TTL` | Rate limit window (seconds) | `10` |
+| `THROTTLE_LIMIT` | Max requests per window | `100` |
+| `PORT` | Server port | `2333` |
+| `TZ` | Timezone | `Asia/Shanghai` |
+| `DISABLE_CACHE` | Disable Redis caching | `false` |
+
+Configuration can also be provided via CLI arguments or YAML files. See `apps/core/src/app.config.ts` for the full config schema.
+
+## API Response Format
+
+All responses are automatically transformed by interceptors:
+
+- **Array** → `{ data: [...] }`
+- **Object** → returned as-is
+- **Paginated** (via `@Paginator`) → `{ data: [...], pagination: {...} }`
+- **Bypass** (via `@Bypass`) → raw response
+
+All response keys are converted to **snake_case** (e.g., `createdAt` → `created_at`).
+
+## Upgrading
+
+### v10 → v11
+
+v11 refactors the Aggregate API: `categories` and `pageMeta` are removed from `GET /aggregate`; a new `GET /aggregate/site` endpoint is added for lightweight site metadata. See [Upgrading to v11](./docs/migrations/v11.md).
+
+### v9 → v10
+
+v10 includes a breaking auth system refactor. See [Upgrading to v10](./docs/migrations/v10.md).
+
+## Related Projects
+
+| Project | Description |
+|---------|-------------|
+| [Shiroi](https://github.com/innei-dev/Shiroi) | Next.js frontend |
+| [mx-admin](https://github.com/mx-space/mx-admin) | Vue 3 admin dashboard |
+| [@mx-space/api-client](./packages/api-client) | TypeScript API client SDK |
+| [@haklex/rich-headless](https://github.com/innei/haklex) | Lexical editor (server-side) |
+
+## License
+
+- **`apps/`** — [AGPLv3 with Additional Terms](./ADDITIONAL_TERMS.md)
+- **Everything else** — [MIT](./LICENSE)
+
+See [LICENSE](./LICENSE) for full details.

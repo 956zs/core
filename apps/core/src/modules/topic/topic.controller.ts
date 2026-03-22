@@ -1,19 +1,46 @@
-import { Body, Get, Param, Post, Put } from '@nestjs/common'
-import { Auth } from '~/common/decorators/auth.decorator'
-import { HTTPDecorators } from '~/common/decorators/http.decorator'
+import { Get, Param } from '@nestjs/common'
+import slugify from 'slugify'
+
+import { TranslateFields } from '~/common/decorators/translate-fields.decorator'
 import { CannotFindException } from '~/common/exceptions/cant-find.exception'
 import { MongoIdDto } from '~/shared/dto/id.dto'
 import { BaseCrudFactory } from '~/transformers/crud-factor.transformer'
-import slugify from 'slugify'
-import { TopicModel } from './topic.model'
 
-class Upper {
-  constructor(private readonly _model: MongooseModel<TopicModel>) {}
+import { TopicModel } from './topic.model'
+import { TopicSlugParamsDto } from './topic.schema'
+
+const topicTranslateFields = [
+  { path: 'name', keyPath: 'topic.name' as const, idField: '_id' as const },
+  {
+    path: 'introduce',
+    keyPath: 'topic.introduce' as const,
+    idField: '_id' as const,
+  },
+]
+
+const topicTranslateListFields = [
+  { path: '[].name', keyPath: 'topic.name' as const, idField: '_id' as const },
+  {
+    path: '[].introduce',
+    keyPath: 'topic.introduce' as const,
+    idField: '_id' as const,
+  },
+]
+
+export class TopicBaseController extends BaseCrudFactory({
+  model: TopicModel,
+}) {
+  @Get('/all')
+  @TranslateFields(...topicTranslateListFields)
+  async getAll() {
+    return await this.model.find({}).sort({ created: -1 }).lean()
+  }
 
   @Get('/slug/:slug')
-  async getTopicByTopic(@Param('slug') slug: string) {
+  @TranslateFields(...topicTranslateFields)
+  async getTopicByTopic(@Param() { slug }: TopicSlugParamsDto) {
     slug = slugify(slug)
-    const topic = await this._model.findOne({ slug }).lean()
+    const topic = await this.model.findOne({ slug }).lean()
     if (!topic) {
       throw new CannotFindException()
     }
@@ -21,24 +48,9 @@ class Upper {
     return topic
   }
 
-  @Post('/')
-  @HTTPDecorators.Idempotence()
-  @Auth()
-  async create(@Body() body: Partial<TopicModel>) {
-    return await this._model.create(body)
-  }
-
-  @Put('/:id')
-  @Auth()
-  async update(@Body() body: Partial<TopicModel>, @Param() param: MongoIdDto) {
-    return await this._model
-      .findOneAndUpdate({ _id: param.id }, body, { new: true })
-      .lean()
+  @Get('/:id')
+  @TranslateFields(...topicTranslateFields)
+  async get(@Param() param: MongoIdDto) {
+    return await this.model.findById(param.id).lean()
   }
 }
-
-export const TopicBaseController = BaseCrudFactory({
-  model: TopicModel,
-
-  classUpper: Upper,
-})

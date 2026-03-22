@@ -4,16 +4,18 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common'
+
 import { TASK_QUEUE_LIMITS, TASK_QUEUE_TTL_MS } from './task-queue.constants'
 import { TaskQueueService } from './task-queue.service'
 import {
-  TaskStatus,
   type TaskExecuteContext,
   type TaskHandler,
+  TaskStatus,
 } from './task-queue.types'
 
 @Injectable()
 export class TaskQueueProcessor implements OnModuleInit, OnModuleDestroy {
+  private static readonly REDIS_WARN_INTERVAL_MS = 30_000
   private readonly logger = new Logger(TaskQueueProcessor.name)
   private readonly workerId: string
   private isRunning = false
@@ -21,6 +23,7 @@ export class TaskQueueProcessor implements OnModuleInit, OnModuleDestroy {
   private activeAbortControllers = new Map<string, AbortController>()
   private handlers = new Map<string, TaskHandler>()
   private activeTaskCount = 0
+  private lastRedisUnavailableWarnAt = 0
 
   constructor(private readonly taskService: TaskQueueService) {
     this.workerId = `worker-${process.pid}-${Date.now().toString(36)}`
@@ -73,11 +76,14 @@ export class TaskQueueProcessor implements OnModuleInit, OnModuleDestroy {
     if (!this.isRunning) return
 
     try {
+      if (!this.taskService.isRedisReady()) {
+        this.warnRedisUnavailable('Task processor waiting for Redis connection')
+        this.scheduleNextPoll()
+        return
+      }
+
       if (this.activeTaskCount >= TASK_QUEUE_LIMITS.maxConcurrency) {
-        this.pollTimeoutId = setTimeout(
-          () => this.poll(),
-          TASK_QUEUE_LIMITS.processorPollIntervalMs,
-        )
+        this.scheduleNextPoll()
         return
       }
 
@@ -89,12 +95,39 @@ export class TaskQueueProcessor implements OnModuleInit, OnModuleDestroy {
         })
       }
     } catch (error) {
-      this.logger.error(`Poll error: ${error.message}`, error.stack)
+      if (this.taskService.isRedisUnavailableError(error)) {
+        this.warnRedisUnavailable('Task processor waiting for Redis connection')
+      } else {
+        this.logger.error(`Poll error: ${error.message}`, error.stack)
+      }
     }
 
+    this.scheduleNextPoll()
+  }
+
+  private scheduleNextPoll() {
     this.pollTimeoutId = setTimeout(
       () => this.poll(),
       TASK_QUEUE_LIMITS.processorPollIntervalMs,
+    )
+  }
+
+  private warnRedisUnavailable(message: string) {
+    const now = Date.now()
+    if (
+      now - this.lastRedisUnavailableWarnAt <
+      TaskQueueProcessor.REDIS_WARN_INTERVAL_MS
+    ) {
+      return
+    }
+
+    this.lastRedisUnavailableWarnAt = now
+    this.logger.warn(
+      JSON.stringify({
+        module: TaskQueueProcessor.name,
+        message,
+        redisStatus: this.taskService.getRedisStatus(),
+      }),
     )
   }
 

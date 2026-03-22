@@ -1,5 +1,319 @@
 # CHANGELOG
 
+## [11.0.1](https://github.com/mx-space/core/compare/v11.0.0...v11.0.1) (2026-03-22)
+
+
+### Bug Fixes
+
+* **file:** orphan cleanup idempotency; remove orphan cleanup cron ([2b4e946](https://github.com/mx-space/core/commit/2b4e946a49b46b24e97af6f737c9969add130cac))
+
+
+
+# [11.0.0](https://github.com/mx-space/core/compare/v11.0.0-alpha.1...v11.0.0) (2026-03-22)
+
+
+### Bug Fixes
+
+* **category:** handle null category in category service ([71f4f91](https://github.com/mx-space/core/commit/71f4f91f41fe662003f22325fef80dccad723d39))
+* **deps:** update dependency @nestjs/platform-fastify to v11.1.16 [security] ([#2620](https://github.com/mx-space/core/issues/2620)) ([1d3da45](https://github.com/mx-space/core/commit/1d3da453debe5c64bf8acacd843d84de5c7b6788))
+* **post:** add Types import from mongoose ([9cdb244](https://github.com/mx-space/core/commit/9cdb244e600ba08d52fed6652a922ed3504e956a))
+
+
+### Features
+
+* replace Algolia with local CJK search ([#2621](https://github.com/mx-space/core/issues/2621)) ([2095087](https://github.com/mx-space/core/commit/209508791dd0c71af3845583560ae414110b276f))
+
+
+
+# [11.0.0-alpha.1](https://github.com/mx-space/core/compare/v11.0.0-alpha.0...v11.0.0-alpha.1) (2026-03-16)
+
+
+### Bug Fixes
+
+* **gateway:** send online count directly to connecting socket ([386b8c3](https://github.com/mx-space/core/commit/386b8c3ca42a4836086dbd8cbd8b51786b0662c1))
+
+
+
+# [11.0.0-alpha.0](https://github.com/mx-space/core/compare/v10.5.3...v11.0.0-alpha.0) (2026-03-15)
+
+
+
+## [10.5.3](https://github.com/mx-space/core/compare/v10.5.2...v10.5.3) (2026-03-15)
+
+
+### Bug Fixes
+
+* **ai-translation:** translate page subtitles ([c20bf6e](https://github.com/mx-space/core/commit/c20bf6ee6627f07ebe142e63914953fb79b4f9ef))
+* **core:** prevent slugged notes from breaking url builder ([6731c88](https://github.com/mx-space/core/commit/6731c88de6e2c3004ad1666752fa42020dd8c38b))
+
+
+
+## [10.5.2](https://github.com/mx-space/core/compare/v10.5.1...v10.5.2) (2026-03-15)
+
+
+### Features
+
+* **aggregate:** add comment options to aggregate response ([a31db1f](https://github.com/mx-space/core/commit/a31db1f8622b5bdd8345a388c8898676c5e4eed9))
+* **aggregate:** add public /aggregate/site_info endpoint ([88bd758](https://github.com/mx-space/core/commit/88bd75860d1f5b669ed92b4a3b7bb15cb6e6feaf))
+* **aggregate:** update aggregate service and models to include summary and mood/weather fields ([ab426b1](https://github.com/mx-space/core/commit/ab426b107a7672f3c9aacc1ca8d7533e7f03c293))
+* **comment:** add disableComment option to CommentOptionsModel ([cc31bbd](https://github.com/mx-space/core/commit/cc31bbd74dae969ec46cd69601db60cbd2a3bcc8))
+* **comment:** use authProvider for comment auth channel ([0b9da3b](https://github.com/mx-space/core/commit/0b9da3b724578288cc848f6634ac84afd7da8d28))
+
+
+
+## [10.5.1](https://github.com/mx-space/core/compare/v10.5.0...v10.5.1) (2026-03-14)
+
+
+### Bug Fixes
+
+* **ai-translation:** normalize tags in translation events ([61d9fb5](https://github.com/mx-space/core/commit/61d9fb5c5d8641d59aeb3f78f6b1e04d82a19eb7))
+* **recently:** resolve type compatibility issue in RecentlyDto ([3566ac6](https://github.com/mx-space/core/commit/3566ac6f6dadad991b42fb08bd2e9fea02bc507a))
+
+
+### Features
+
+* **api-client:** add RecentlyTypeEnum and metadata interfaces ([4339332](https://github.com/mx-space/core/commit/4339332eb94f56e78cbec262a5347ed366745f8c))
+* **comment:** add reader ref support and migration ([135868b](https://github.com/mx-space/core/commit/135868b3562a89d4ba3929e83a3132c69ca2c4c1))
+* **recently:** add typed metadata schema and model fields ([46a8ae5](https://github.com/mx-space/core/commit/46a8ae562e2e413f56783b0571b9b786ddf10fd8))
+* **recently:** pass type/metadata in service create/update ([c6c8b2b](https://github.com/mx-space/core/commit/c6c8b2bb56ed662fb759bded881ae3d67170025b))
+
+
+
+# [10.5.0](https://github.com/mx-space/core/compare/v10.4.0...v10.5.0) (2026-03-14)
+
+
+### Bug Fixes
+
+* **note:** translate list results by request locale ([5c44178](https://github.com/mx-space/core/commit/5c44178386ff0817b82c78921d1c1d2aa8688bd0))
+
+
+### Features
+
+* **ai:** add slug backfill task for notes without slug ([0835863](https://github.com/mx-space/core/commit/083586358adcb4d32321b68d0ca9f38486fb6960))
+* flatten comment threads ([70385d9](https://github.com/mx-space/core/commit/70385d9e104106cb20ca8bc54f2f750e5ae0f121))
+* **note:** add withSummary option to note list API ([6e56df9](https://github.com/mx-space/core/commit/6e56df901b17f38cb7788844d3abc9f71304bb0f))
+* **note:** enhance note pagination with summary retrieval ([855ef99](https://github.com/mx-space/core/commit/855ef99e8591d340d1d1c8efb7093f27b955e27a))
+
+
+
+# [10.4.0](https://github.com/mx-space/core/compare/v10.3.3...v10.4.0) (2026-03-13)
+
+
+### Bug Fixes
+
+* **note:** expose slug in note timeline list ([5b2f7b5](https://github.com/mx-space/core/commit/5b2f7b5fd6c60f585600c0229265bbcd3cfc1f07))
+* **topic:** validate slug params with zod ([2de6b2b](https://github.com/mx-space/core/commit/2de6b2b6baa152e28dffef3ce5e185cf29da8c51))
+
+
+### Features
+
+* **note:** add seo slug route and sdk updates ([0203692](https://github.com/mx-space/core/commit/02036928760e3d4093fa93ee2d547a896b1dce95))
+
+
+
+## [10.3.3](https://github.com/mx-space/core/compare/v10.3.2...v10.3.3) (2026-03-13)
+
+
+### Bug Fixes
+
+* **core:** degrade redis bootstrap paths ([976b6cb](https://github.com/mx-space/core/commit/976b6cb5d3fa746ab191e4c5f581a1797bc706e2))
+
+
+
+## [10.3.2](https://github.com/mx-space/core/compare/v10.3.1...v10.3.2) (2026-03-10)
+
+
+### Bug Fixes
+
+* add Redis timeout and error handling to prevent request hanging ([46206e8](https://github.com/mx-space/core/commit/46206e88a79e167bfaa6654095c980c927c163eb))
+
+
+### Features
+
+* enhance admin asset update process and introduce event broadcasting ([e2868c2](https://github.com/mx-space/core/commit/e2868c25f33a0d9d389a3978b1f76c164e7f412a))
+* enhance feed content rendering with lexical format support ([a6bbd75](https://github.com/mx-space/core/commit/a6bbd7573da20f3eab5bc0054ca8ad73ce8662e0))
+* refactor webhook package structure and add model extraction script ([1f189d7](https://github.com/mx-space/core/commit/1f189d7fcd1a267924ff562c4d4766717ccdcc94))
+* translate text within excalidraw nodes during AI translation ([4b2c938](https://github.com/mx-space/core/commit/4b2c9380d0b5c598abe32f4a9ef27fc6135f28fb))
+
+
+
+## [10.3.1](https://github.com/mx-space/core/compare/v10.3.0...v10.3.1) (2026-03-09)
+
+
+### Bug Fixes
+
+* include lang in cache key and support NEXT_LOCALE cookie for request context ([bcef061](https://github.com/mx-space/core/commit/bcef0612ba27177c733ff6d9cfcfd5fb1b8dd26a))
+* translation entry interceptor ([ac8009d](https://github.com/mx-space/core/commit/ac8009d0056ae76d9c17c82fa3448f8f12fbf10c))
+
+
+### Features
+
+* translation entry interceptor, topic controller e2e, object-scan types, image/tool utils ([c33157c](https://github.com/mx-space/core/commit/c33157c25ee37b1bfb60b81f03f25ccd2c59ab90))
+
+
+
+# [10.3.0](https://github.com/mx-space/core/compare/v10.2.0...v10.3.0) (2026-03-08)
+
+
+### Bug Fixes
+
+* **ai-summary:** normalize lang query param with parseLanguageCode ([3dc7492](https://github.com/mx-space/core/commit/3dc74923ecff10255fc03fe6772c330b2842d144))
+
+
+### Features
+
+* **ai:** add auto-generation of translation entries for categories, topics, and notes ([65711aa](https://github.com/mx-space/core/commit/65711aa64380eb011f3f8faa9819bc312acb7b50))
+* **ai:** translation entry model, service, controller and translate-fields interceptor ([a55fc7a](https://github.com/mx-space/core/commit/a55fc7a654c8f1e8610b24a71ad8e671231d4168))
+* **schema:** enhance partial schemas for notes, pages, and posts with new fields ([f66c9ed](https://github.com/mx-space/core/commit/f66c9ed9cca1091730985813334adccb9462affd))
+* 更新文件上传前缀支持模板占位符，增强灵活性 ([#2584](https://github.com/mx-space/core/issues/2584)) ([2b5354a](https://github.com/mx-space/core/commit/2b5354a6f907947993dda64733e8bbd62c6cc62d))
+
+
+
+# [10.2.0](https://github.com/mx-space/core/compare/v0.7.0...v10.2.0) (2026-03-08)
+
+
+
+# [0.7.0](https://github.com/mx-space/core/compare/v0.6.0...v0.7.0) (2026-03-08)
+
+
+### Bug Fixes
+
+* **webhook:** correct dist output paths for tsdown esm/cjs ([5fc8a03](https://github.com/mx-space/core/commit/5fc8a039088a70d0c29d5c914e7fa6d89868c34e))
+
+
+
+# [0.6.0](https://github.com/mx-space/core/compare/v10.1.10...v0.6.0) (2026-03-08)
+
+
+### Features
+
+* **webhook:** add X-Webhook-Source header to indicate event origin ([899a5f1](https://github.com/mx-space/core/commit/899a5f16495eb88ed9181f344a3956cfa9dc8bee))
+
+
+
+## [10.1.10](https://github.com/mx-space/core/compare/v10.1.9...v10.1.10) (2026-03-07)
+
+
+
+## [10.1.9](https://github.com/mx-space/core/compare/v10.1.8...v10.1.9) (2026-03-03)
+
+
+### Bug Fixes
+
+* **telemetry:** harden telemetry module robustness and security ([515c0e7](https://github.com/mx-space/core/commit/515c0e7dbe9ee1c1bc5a5d16a7ad4883d7e83437))
+
+
+
+## [10.1.8](https://github.com/mx-space/core/compare/v10.1.7...v10.1.8) (2026-03-03)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @haklex/rich-headless to v0.0.50 ([#2608](https://github.com/mx-space/core/issues/2608)) ([4258242](https://github.com/mx-space/core/commit/42582429982db7fe108a8a0db3a4bdf1e2c281e9))
+* **deps:** update dependency @haklex/rich-headless to v0.0.54 ([#2610](https://github.com/mx-space/core/issues/2610)) ([027f62f](https://github.com/mx-space/core/commit/027f62f126d55fa812ff066907764ccf832a2959))
+* **deps:** update dependency @nestjs/schedule to v6.1.1 ([#2604](https://github.com/mx-space/core/issues/2604)) ([45a297a](https://github.com/mx-space/core/commit/45a297a95788b7c563a9e075ce1c8444142d5cd7))
+
+
+
+## [10.1.7](https://github.com/mx-space/core/compare/v10.1.6...v10.1.7) (2026-03-02)
+
+
+### Features
+
+* **gateway:** implement broadcast method for admin events ([ff3cf68](https://github.com/mx-space/core/commit/ff3cf68c742e2928bf249e641bfb9584f0c6956e))
+
+
+
+## [10.1.6](https://github.com/mx-space/core/compare/v10.1.5...v10.1.6) (2026-03-02)
+
+
+### Features
+
+* **webhook:** introduce EventPayloadEnricherService for payload enrichment ([a5a2b79](https://github.com/mx-space/core/commit/a5a2b79bd6e406375c04aeb0d259907d131fa4d5))
+
+
+
+## [10.1.5](https://github.com/mx-space/core/compare/v10.1.4...v10.1.5) (2026-03-02)
+
+
+### Bug Fixes
+
+* **webhook:** update pagination logic in getEventsByHookId method ([2450f9d](https://github.com/mx-space/core/commit/2450f9d08b2b36e8c71dd12c20ccc5983542e10c))
+
+
+
+## [10.1.4](https://github.com/mx-space/core/compare/v10.1.3...v10.1.4) (2026-03-01)
+
+
+### Features
+
+* **translation:** introduce TranslationConsistencyService for improved translation validation ([341cfd2](https://github.com/mx-space/core/commit/341cfd2f3829505b75df421a375a29348c3fbea5))
+
+
+
+## [10.1.3](https://github.com/mx-space/core/compare/v10.1.2...v10.1.3) (2026-03-01)
+
+
+### Features
+
+* **socket:** optimize socket fetching and configuration ([13eb074](https://github.com/mx-space/core/commit/13eb0747f19a0bb957cfb90e0fafd7a0af1221f1))
+* **translation:** add content fields to translation and controller services ([6526893](https://github.com/mx-space/core/commit/6526893f0c0db0a7607053d5ebe2e67a605201b8))
+
+
+
+## [10.1.2](https://github.com/mx-space/core/compare/v10.1.1...v10.1.2) (2026-03-01)
+
+
+### Features
+
+* **content:** enhance content hashing for Lexical format ([3b5e177](https://github.com/mx-space/core/commit/3b5e17726c8002ca42e4516578fb4ebc0460ac91))
+
+
+
+## [10.1.1](https://github.com/mx-space/core/compare/v10.1.0...v10.1.1) (2026-03-01)
+
+
+### Bug Fixes
+
+* **ai:** improve error handling and cleanup in AiInFlightService ([2267810](https://github.com/mx-space/core/commit/22678104ec185b73fc47bb5fbc487e75ba332150))
+
+
+### Features
+
+* **ai-task:** add smart retry for partial-failed translation tasks ([ecdbf50](https://github.com/mx-space/core/commit/ecdbf50879f8313b739172d54fc1a71b16b6d24f))
+* **ai:** enhance JSON extraction utilities and update translation strategy ([f673630](https://github.com/mx-space/core/commit/f67363036c6da979ac71ffe16bfd8c8a7ff3412e))
+* **visitor-event:** enhance visitor event dispatch with additional content fields ([74d9398](https://github.com/mx-space/core/commit/74d939820195a7fdfb608c61c37c749284a23c89))
+
+
+
+# [10.1.0](https://github.com/mx-space/core/compare/v10.0.4...v10.1.0) (2026-02-28)
+
+
+### Bug Fixes
+
+* **release:** update Dokploy webhook handling in release workflow ([328013a](https://github.com/mx-space/core/commit/328013af093f1fc274ca179d7ade81d8cd118c0e))
+* **test:** add missing scheduleRegenerationForStaleTranslations mock in translation service spec ([4e701a2](https://github.com/mx-space/core/commit/4e701a2580f4cd389fac72b88a080b2d76da0db5))
+* **test:** remove unnecessary whitespace in lexical-translation-e2e.spec.ts ([c623a20](https://github.com/mx-space/core/commit/c623a20097aa0b09564b872c125b9bac931738e3))
+* update @lexical/code patch to improve syntax highlighting support ([3bf4873](https://github.com/mx-space/core/commit/3bf4873e58fce0bef810c60f4377bd0de0fdd4c6))
+
+
+### Features
+
+* add patch for @lexical/code@0.41.0 and remove outdated patch ([e2c1492](https://github.com/mx-space/core/commit/e2c14928854af53b915cbf62f28aaf11a7ca1d9f))
+* add v10.0.5 migration for Lexical root block ID backfill ([66c3650](https://github.com/mx-space/core/commit/66c365061364fa64a2792cb9950aadfcb8350a33))
+* **aggregate:** add /latest endpoint for top content per type ([563a716](https://github.com/mx-space/core/commit/563a716ac8fe7d584a182f5dc94d74edd753d653))
+* **ai:** enhance translation service with new lexical features and dependencies ([534b0f7](https://github.com/mx-space/core/commit/534b0f71c697f96216bf6c61c19173cdc9367cd4))
+* **ai:** enhance translation strategies and introduce new event handler ([426dc07](https://github.com/mx-space/core/commit/426dc07cc4d9ff24f9cfc09d626d6234a7d45619))
+* **ai:** improve lexical translation and update utilities ([7475a8d](https://github.com/mx-space/core/commit/7475a8d49ec95c0105f111af047c86d8fc52419f))
+* **ai:** refine AI translation, runtime, and add json util ([481beeb](https://github.com/mx-space/core/commit/481beeb49b44c0891194b2461bbe1d89903d3d10))
+* **ai:** update translation prompts with enhanced safety and structure rules ([4f035f2](https://github.com/mx-space/core/commit/4f035f2bbbb9095dae35702d28210c7c9f8a0ea6))
+* **comment:** add language support for comment anchors and enhance anchor resolution ([2218ae2](https://github.com/mx-space/core/commit/2218ae2bc5cdddfc0afd7220ef88e66af1be81c5))
+* **content:** introduce content preference handling for notes and pages ([14ed55b](https://github.com/mx-space/core/commit/14ed55b9a4c61fdf4f3fa47d18f3824e86ff006d))
+* **draft:** implement draft history service with diff strategies ([5171707](https://github.com/mx-space/core/commit/5171707e6b32a7d0d115f0624a9860d5814ca2a9))
+* **patch:** add patch for @lexical/code@0.40.0 and update workspace configuration ([066171f](https://github.com/mx-space/core/commit/066171fe6d1001403f646dcd85be2f23390340bb))
+
+
+
 ## [10.0.4](https://github.com/mx-space/core/compare/v10.0.3...v10.0.4) (2026-02-18)
 
 

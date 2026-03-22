@@ -8,22 +8,26 @@ import {
   Put,
   Query,
 } from '@nestjs/common'
+import type { PipelineStage } from 'mongoose'
+
 import { ApiController } from '~/common/decorators/api-controller.decorator'
 import { Auth } from '~/common/decorators/auth.decorator'
 import { HTTPDecorators, Paginator } from '~/common/decorators/http.decorator'
-import { IpLocation } from '~/common/decorators/ip.decorator'
 import type { IpRecord } from '~/common/decorators/ip.decorator'
+import { IpLocation } from '~/common/decorators/ip.decorator'
 import { Lang } from '~/common/decorators/lang.decorator'
 import { IsAuthenticated } from '~/common/decorators/role.decorator'
+import { TranslateFields } from '~/common/decorators/translate-fields.decorator'
 import { CannotFindException } from '~/common/exceptions/cant-find.exception'
 import { CountingService } from '~/processors/helper/helper.counting.service'
 import {
-  TranslationService,
   type ArticleTranslationInput,
+  TranslationService,
 } from '~/processors/helper/helper.translation.service'
 import { MongoIdDto } from '~/shared/dto/id.dto'
 import { addYearCondition } from '~/transformers/db-query.transformer'
-import type { PipelineStage } from 'mongoose'
+import { applyContentPreference } from '~/utils/content.util'
+
 import type { CategoryModel } from '../category/category.model'
 import { PostModel } from './post.model'
 import {
@@ -46,6 +50,11 @@ export class PostController {
 
   @Get('/')
   @Paginator
+  @TranslateFields({
+    path: 'docs[].category.name',
+    keyPath: 'category.name',
+    idField: '_id',
+  })
   async getPaginate(
     @Query() query: PostPagerDto,
     @IsAuthenticated() isAuthenticated: boolean,
@@ -166,7 +175,10 @@ export class PostController {
               summary: doc.summary,
               tags: doc.tags,
               meta: doc.meta,
+              contentFormat: doc.contentFormat,
+              content: doc.content,
               modified: doc.modified,
+              created: doc.created,
             })
           }
 
@@ -219,6 +231,11 @@ export class PostController {
   }
 
   @Get('/:id')
+  @TranslateFields({
+    path: 'category.name',
+    keyPath: 'category.name',
+    idField: '_id',
+  })
   async getById(
     @Param() params: MongoIdDto,
     @IsAuthenticated() isAuthenticated: boolean,
@@ -244,9 +261,15 @@ export class PostController {
   }
 
   @Get('/latest')
+  @TranslateFields({
+    path: 'category.name',
+    keyPath: 'category.name',
+    idField: '_id',
+  })
   async getLatest(
     @IpLocation() ip: IpRecord,
     @IsAuthenticated() isAuthenticated: boolean,
+    @Lang() lang?: string,
   ) {
     const query: any = {}
 
@@ -270,13 +293,19 @@ export class PostController {
       {} as any,
       ip,
       isAuthenticated,
+      lang,
     )
   }
 
   @Get('/:category/:slug')
+  @TranslateFields({
+    path: 'category.name',
+    keyPath: 'category.name',
+    idField: '_id',
+  })
   async getByCateAndSlug(
     @Param() params: CategoryAndSlugDto,
-    @Query() _: PostDetailQueryDto,
+    @Query() query: PostDetailQueryDto,
     @IpLocation() { ip }: IpRecord,
     @IsAuthenticated() isAuthenticated?: boolean,
     @Lang() lang?: string,
@@ -314,17 +343,24 @@ export class PostController {
       },
     })
 
-    return {
-      ...baseData,
-      title: translationResult.title,
-      text: translationResult.text,
-      summary: translationResult.summary,
-      tags: translationResult.tags,
-      isTranslated: translationResult.isTranslated,
-      translationMeta: translationResult.translationMeta,
-      availableTranslations: translationResult.availableTranslations,
-      liked,
-    }
+    return applyContentPreference(
+      {
+        ...baseData,
+        title: translationResult.title,
+        text: translationResult.text,
+        summary: translationResult.summary,
+        tags: translationResult.tags,
+        ...(translationResult.content && {
+          content: translationResult.content,
+          contentFormat: translationResult.contentFormat,
+        }),
+        isTranslated: translationResult.isTranslated,
+        translationMeta: translationResult.translationMeta,
+        availableTranslations: translationResult.availableTranslations,
+        liked,
+      },
+      query.prefer,
+    )
   }
 
   @Post('/')

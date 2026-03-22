@@ -6,8 +6,7 @@ export const CronTaskType = {
   PushToBaiduSearch: 'cron:push-to-baidu-search',
   PushToBingSearch: 'cron:push-to-bing-search',
   DeleteExpiredJWT: 'cron:delete-expired-jwt',
-  CleanupOrphanImages: 'cron:cleanup-orphan-images',
-  SyncPublishedImagesToS3: 'cron:sync-published-images-to-s3',
+  RebuildSearchIndex: 'cron:rebuild-search-index',
 } as const
 
 export type CronTaskTypeValue = (typeof CronTaskType)[keyof typeof CronTaskType]
@@ -66,17 +65,11 @@ export const CronTaskMetas: Record<
     cronExpression: 'EVERY_DAY_AT_1AM',
     methodName: 'deleteExpiredJWT',
   },
-  [CronTaskType.CleanupOrphanImages]: {
-    name: 'cleanupOrphanImages',
-    description: '清理孤儿图片',
-    cronExpression: 'EVERY_HOUR',
-    methodName: 'cleanupOrphanImages',
-  },
-  [CronTaskType.SyncPublishedImagesToS3]: {
-    name: 'syncPublishedImagesToS3',
-    description: '同步已发布内容中的本地图片到 S3',
-    cronExpression: 'EVERY_HOUR',
-    methodName: 'syncPublishedImagesToS3',
+  [CronTaskType.RebuildSearchIndex]: {
+    name: 'rebuildSearchIndex',
+    description: '重建搜索索引',
+    cronExpression: 'EVERY_DAY_AT_4AM',
+    methodName: 'rebuildSearchIndex',
   },
 }
 

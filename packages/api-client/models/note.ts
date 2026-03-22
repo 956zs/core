@@ -5,7 +5,7 @@ import type {
 } from './base'
 import type { TopicModel } from './topic'
 
-export interface NoteModel extends TextBaseModel {
+export type NoteModel = TextBaseModel & {
   isPublished: boolean
   count: {
     read: number
@@ -19,6 +19,7 @@ export interface NoteModel extends TextBaseModel {
   publicAt?: Date
   password?: string | null
   nid: number
+  slug?: string
 
   location?: string
 

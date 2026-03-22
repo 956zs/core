@@ -1,13 +1,16 @@
 import { CacheKey, CacheTTL } from '@nestjs/cache-manager'
 import { Get, Query } from '@nestjs/common'
+import { omit } from 'es-toolkit/compat'
+
 import { ApiController } from '~/common/decorators/api-controller.decorator'
 import { Auth } from '~/common/decorators/auth.decorator'
 import { HttpCache } from '~/common/decorators/cache.decorator'
 import { Lang } from '~/common/decorators/lang.decorator'
 import { IsAuthenticated } from '~/common/decorators/role.decorator'
+import { TranslateFields } from '~/common/decorators/translate-fields.decorator'
 import { CacheKeys } from '~/constants/cache.constant'
 import { TranslationService } from '~/processors/helper/helper.translation.service'
-import { omit } from 'es-toolkit/compat'
+
 import { AnalyzeService } from '../analyze/analyze.service'
 import { ConfigsService } from '../configs/configs.service'
 import { NoteService } from '../note/note.service'
@@ -15,6 +18,7 @@ import { OwnerService } from '../owner/owner.service'
 import { SnippetService } from '../snippet/snippet.service'
 import {
   AggregateQueryDto,
+  LatestQueryDto,
   ReadAndLikeCountDocumentType,
   ReadAndLikeCountTypeDto,
   TimelineQueryDto,
@@ -34,67 +38,60 @@ export class AggregateController {
     private readonly translationService: TranslationService,
   ) {}
 
+  private async getThemeConfig(theme?: string) {
+    if (!theme) {
+      return
+    }
+
+    const cached = await this.snippetService.getCachedSnippet(
+      'theme',
+      theme,
+      'public',
+    )
+    if (cached) {
+      return JSON.safeParse(cached) || cached
+    }
+    return this.snippetService.getPublicSnippetByName(theme, 'theme')
+  }
+
   @Get('/')
   @HttpCache({
     key: CacheKeys.Aggregate,
     ttl: 10 * 60,
     withQuery: true,
   })
-  async aggregate(@Query() query: AggregateQueryDto, @Lang() lang?: string) {
+  async aggregate(@Query() query: AggregateQueryDto) {
     const { theme } = query
 
     const tasks = await Promise.allSettled([
       this.ownerService.getOwner(),
-      this.aggregateService.getAllCategory(),
-      this.aggregateService.getAllPages(),
       this.configsService.get('url'),
       this.configsService.get('seo'),
+      this.configsService.get('commentOptions'),
       this.noteService.getLatestNoteId(),
-      !theme
-        ? Promise.resolve()
-        : this.snippetService
-            .getCachedSnippet('theme', theme, 'public')
-            .then((cached) => {
-              if (cached) {
-                return JSON.safeParse(cached) || cached
-              }
-              return this.snippetService.getPublicSnippetByName(theme, 'theme')
-            }),
+      this.getThemeConfig(theme),
       this.configsService.get('ai'),
     ])
     const [
       user,
-      categories,
-      pageMeta,
       url,
       seo,
+      commentOptions,
       latestNoteId,
       themeConfig,
       aiConfig,
     ] = tasks.map((t) => (t.status === 'fulfilled' ? t.value : null))
-    let translatedPageMeta = pageMeta as any[]
-    if (lang && translatedPageMeta?.length) {
-      translatedPageMeta = await this.translationService.translateList({
-        items: translatedPageMeta,
-        targetLang: lang,
-        translationFields: ['title'] as const,
-        getInput: (item: any) => ({
-          id: item._id?.toString?.() ?? '',
-          title: item.title ?? '',
-        }),
-        applyResult: (item: any, translation) => {
-          if (!translation?.isTranslated) return item
-          return { ...item, title: translation.title }
-        },
-      })
-    }
 
     return {
       user,
       seo,
       url: omit(url, ['adminUrl']),
-      categories,
-      pageMeta: translatedPageMeta,
+      commentOptions: commentOptions
+        ? {
+            disableComment: commentOptions.disableComment ?? false,
+            allowGuestComment: commentOptions.allowGuestComment ?? true,
+          }
+        : undefined,
       latestNoteId,
       theme: themeConfig,
       ai: {
@@ -103,7 +100,37 @@ export class AggregateController {
     }
   }
 
+  @Get('/site')
+  @HttpCache({
+    key: CacheKeys.AggregateSite,
+    ttl: 10 * 60,
+    withQuery: true,
+  })
+  async site() {
+    const [user, url, seo] = await Promise.all([
+      this.ownerService.getOwner(),
+      this.configsService.get('url'),
+      this.configsService.get('seo'),
+    ])
+
+    return {
+      user: {
+        id: user.id,
+        name: user.name,
+        socialIds: user.socialIds,
+      },
+      seo,
+      url: {
+        webUrl: url.webUrl,
+      },
+    }
+  }
+
   @Get('/top')
+  @TranslateFields(
+    { path: 'notes[].mood', keyPath: 'note.mood' },
+    { path: 'notes[].weather', keyPath: 'note.weather' },
+  )
   async top(
     @Query() query: TopQueryDto,
     @IsAuthenticated() isAuthenticated: boolean,
@@ -174,7 +201,68 @@ export class AggregateController {
     return result
   }
 
+  @Get('/latest')
+  @TranslateFields(
+    { path: 'notes[].mood', keyPath: 'note.mood' },
+    { path: 'notes[].weather', keyPath: 'note.weather' },
+    { path: 'data[].mood', keyPath: 'note.mood' },
+    { path: 'data[].weather', keyPath: 'note.weather' },
+  )
+  async getLatest(@Query() query: LatestQueryDto, @Lang() lang?: string) {
+    const { limit = 5, types, combined = false } = query
+    const result = await this.aggregateService.getLatest(limit, types, combined)
+
+    if (!lang) return result
+
+    type LatestItem = {
+      _id?: any
+      id?: string
+      title?: string
+      created?: Date | null
+      modified?: Date | null
+    } & Record<string, any>
+
+    const translateItems = (items: LatestItem[]) =>
+      this.translationService.translateList({
+        items,
+        targetLang: lang,
+        translationFields: ['title', 'translationMeta'] as const,
+        getInput: (item) => ({
+          id: item._id?.toString?.() ?? item.id ?? '',
+          title: item.title ?? '',
+          created: item.created,
+          modified: item.modified,
+        }),
+        applyResult: (item, translation) => {
+          if (!translation?.isTranslated) return item
+          return {
+            ...item,
+            title: translation.title,
+            isTranslated: true,
+            translationMeta: translation.translationMeta,
+          }
+        },
+      })
+
+    if (combined) {
+      return translateItems(result as LatestItem[])
+    }
+
+    const data = result as Record<string, any>
+    if (data.posts?.length) {
+      data.posts = await translateItems(data.posts)
+    }
+    if (data.notes?.length) {
+      data.notes = await translateItems(data.notes)
+    }
+    return data
+  }
+
   @Get('/timeline')
+  @TranslateFields(
+    { path: 'data.notes[].mood', keyPath: 'note.mood' },
+    { path: 'data.notes[].weather', keyPath: 'note.weather' },
+  )
   async getTimeline(@Query() query: TimelineQueryDto, @Lang() lang?: string) {
     const { sort = 1, type, year } = query
     const data = await this.aggregateService.getTimeline(year, type, sort)
@@ -279,6 +367,11 @@ export class AggregateController {
     return {
       count: await this.aggregateService.getAllSiteWordsCount(),
     }
+  }
+
+  @Get('/site_info')
+  async getSiteInfo() {
+    return await this.aggregateService.getSiteInfo()
   }
 
   @Get('/stat/category-distribution')

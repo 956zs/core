@@ -1,7 +1,43 @@
-import { CollectionRefTypes } from '~/constants/db.constant'
-import { normalizeRefType } from '~/utils/database.util'
 import { createZodDto } from 'nestjs-zod'
 import { z } from 'zod'
+
+import { CollectionRefTypes } from '~/constants/db.constant'
+import { normalizeRefType } from '~/utils/database.util'
+
+import { CommentAnchorMode } from './comment.model'
+
+const BlockCommentAnchorSchema = z.object({
+  mode: z.literal(CommentAnchorMode.Block),
+  blockId: z.string().trim().min(1).max(128),
+  blockType: z.string().trim().min(1).max(64).optional(),
+  blockFingerprint: z.string().trim().min(1).max(64).optional(),
+  snapshotText: z.string().max(20000).optional(),
+  lang: z.string().trim().min(1).max(10).nullish(),
+})
+
+const RangeCommentAnchorSchema = z
+  .object({
+    mode: z.literal(CommentAnchorMode.Range),
+    blockId: z.string().trim().min(1).max(128),
+    blockType: z.string().trim().min(1).max(64).optional(),
+    blockFingerprint: z.string().trim().min(1).max(64).optional(),
+    snapshotText: z.string().max(20000).optional(),
+    lang: z.string().trim().min(1).max(10).nullish(),
+    quote: z.string().min(1).max(1000),
+    prefix: z.string().max(300).default(''),
+    suffix: z.string().max(300).default(''),
+    startOffset: z.number().int().min(0),
+    endOffset: z.number().int().min(0),
+  })
+  .refine((data) => data.endOffset >= data.startOffset, {
+    message: 'endOffset must be greater than or equal to startOffset',
+    path: ['endOffset'],
+  })
+
+export const CommentAnchorSchema = z.discriminatedUnion('mode', [
+  BlockCommentAnchorSchema,
+  RangeCommentAnchorSchema,
+])
 
 /**
  * Comment schema for API validation
@@ -19,7 +55,6 @@ export const CommentSchema = z.object({
     .max(50, { message: '地址不得大于 50 个字符' })
     .optional(),
   isWhispers: z.boolean().optional(),
-  source: z.string().optional(),
   avatar: z
     .string()
     .url({ message: '头像必须是合法的 HTTPS URL 哦' })
@@ -27,9 +62,30 @@ export const CommentSchema = z.object({
       message: '头像必须是合法的 HTTPS URL 哦',
     })
     .optional(),
+  anchor: CommentAnchorSchema.optional(),
 })
 
-export class CommentDto extends createZodDto(CommentSchema) {}
+export const AnonymousCommentSchema = CommentSchema
+export const AnonymousReplyCommentSchema = CommentSchema.omit({ anchor: true })
+
+export const ReaderCommentSchema = z.object({
+  text: z.string().min(1).max(500, { message: '评论内容不得大于 500 个字符' }),
+  isWhispers: z.boolean().optional(),
+  anchor: CommentAnchorSchema.optional(),
+})
+
+export const ReaderReplyCommentSchema = ReaderCommentSchema.omit({
+  anchor: true,
+})
+
+export class CommentDto extends createZodDto(AnonymousCommentSchema) {}
+export class ReplyCommentDto extends createZodDto(
+  AnonymousReplyCommentSchema,
+) {}
+export class ReaderCommentDto extends createZodDto(ReaderCommentSchema) {}
+export class ReaderReplyCommentDto extends createZodDto(
+  ReaderReplyCommentSchema,
+) {}
 
 /**
  * Edit comment schema
@@ -60,7 +116,7 @@ export class RequiredGuestReaderCommentDto extends createZodDto(
  */
 export const TextOnlySchema = z.object({
   text: z.string().min(1),
-  source: z.string().optional(),
+  anchor: CommentAnchorSchema.optional(),
 })
 
 export class TextOnlyDto extends createZodDto(TextOnlySchema) {}
@@ -143,6 +199,13 @@ export class BatchCommentDeleteDto extends createZodDto(
 
 // Type exports
 export type CommentInput = z.infer<typeof CommentSchema>
+export type AnonymousCommentInput = z.infer<typeof AnonymousCommentSchema>
+export type AnonymousReplyCommentInput = z.infer<
+  typeof AnonymousReplyCommentSchema
+>
+export type ReaderCommentInput = z.infer<typeof ReaderCommentSchema>
+export type ReaderReplyCommentInput = z.infer<typeof ReaderReplyCommentSchema>
+export type CommentAnchorInput = z.infer<typeof CommentAnchorSchema>
 export type EditCommentInput = z.infer<typeof EditCommentSchema>
 export type RequiredGuestReaderCommentInput = z.infer<
   typeof RequiredGuestReaderCommentSchema

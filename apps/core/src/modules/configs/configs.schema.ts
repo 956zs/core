@@ -1,13 +1,17 @@
-import { zAllowedUrl } from '~/common/zod'
-import { AIProviderType } from '~/modules/ai/ai.types'
 import { createZodDto } from 'nestjs-zod'
 import { z } from 'zod'
+
+import { zAllowedUrl } from '~/common/zod'
+import { AIProviderType } from '~/modules/ai/ai.types'
+
 import { field, section, withMeta } from './configs.zod-schema.util'
 
 // ==================== SEO ====================
 export const SeoSchema = section('SEO 优化', {
   title: field.plain(z.string().min(1).optional(), '网站标题'),
   description: field.plain(z.string().min(1).optional(), '网站描述'),
+  icon: field.halfGrid(z.string().optional(), '浅色图标 URL'),
+  iconDark: field.halfGrid(z.string().optional(), '深色图标 URL'),
   keywords: field.array(z.array(z.string()).optional(), '关键字'),
 })
 export class SeoDto extends createZodDto(SeoSchema) {}
@@ -103,6 +107,9 @@ export const CommentOptionsSchema = section('评论设置', {
   disableComment: field.toggle(z.boolean().optional(), '全站禁止评论', {
     description: '敏感时期专用',
   }),
+  allowGuestComment: field.toggle(z.boolean().optional(), '允许未登录评论', {
+    description: '关闭后，只有已登录 reader 或 owner 可以评论和回复',
+  }),
   spamKeywords: field.array(z.array(z.string()).optional(), '自定义屏蔽关键词'),
   blockIps: field.array(
     z.array(z.union([z.ipv4(), z.ipv6()])).optional(),
@@ -132,16 +139,6 @@ export type BackupOptionsConfig = z.infer<typeof BackupOptionsSchema>
 // ==================== Image Storage Options ====================
 export const ImageStorageOptionsSchema = section('图床设置', {
   enable: field.toggle(z.boolean().optional(), '开启 S3 图床'),
-  syncOnPublish: field.toggle(z.boolean().optional(), '发布时自动同步', {
-    description: '文章/日记发布时自动将本地图片迁移到 S3',
-  }),
-  deleteLocalAfterSync: field.toggle(
-    z.boolean().optional(),
-    '同步后删除本地文件',
-    {
-      description: '图片迁移到 S3 后删除服务器上的本地文件',
-    },
-  ),
   endpoint: field.plain(z.string().optional(), 'S3 服务端点'),
   secretId: field.halfGrid(z.string().optional(), 'Access Key ID'),
   secretKey: field.passwordHalfGrid(z.string().optional(), 'Secret Access Key'),
@@ -155,7 +152,8 @@ export const ImageStorageOptionsSchema = section('图床设置', {
     },
   ),
   prefix: field.plain(z.string().optional(), '文件路径前缀', {
-    description: '上传到 S3 的文件路径前缀，例如 images/',
+    description:
+      '上传到 S3 的文件路径前缀，支持模板占位符: {Y}年4位, {y}年2位, {m}月, {d}日, {h}时, {i}分, {s}秒, {md5}随机MD5, {type}文件类型等。例如: blog/{Y}/{m}/{d} 或 images/',
   }),
 })
 export class ImageStorageOptionsDto extends createZodDto(
@@ -164,6 +162,29 @@ export class ImageStorageOptionsDto extends createZodDto(
 export type ImageStorageOptionsConfig = z.infer<
   typeof ImageStorageOptionsSchema
 >
+
+// ==================== File Upload Options ====================
+export const FileUploadOptionsSchema = section('文件上传设定', {
+  enableCustomNaming: field.toggle(
+    z.boolean().optional(),
+    '启用自定义文件命名',
+    {
+      description: '开启后将使用下方的命名模板规则',
+    },
+  ),
+  filenameTemplate: field.plain(z.string().optional(), '文件名模板', {
+    description:
+      '支持占位符: {Y}年4位, {y}年2位, {m}月, {d}日, {h}时, {i}分, {s}秒, {ms}毫秒, {timestamp}时间戳, {md5}随机MD5, {md5-16}随机MD5(16位), {uuid}UUID, {str-数字}随机字符串, {filename}原文件名(含扩展名), {name}原文件名(不含扩展名), {ext}扩展名',
+  }),
+  pathTemplate: field.plain(z.string().optional(), '文件路径模板', {
+    description:
+      '支持占位符同文件名模板，另外支持 {type} 文件类型, {localFolder:数字} 原文件所在文件夹层级',
+  }),
+})
+export class FileUploadOptionsDto extends createZodDto(
+  FileUploadOptionsSchema,
+) {}
+export type FileUploadOptionsConfig = z.infer<typeof FileUploadOptionsSchema>
 
 // ==================== Baidu Search Options ====================
 export const BaiduSearchOptionsSchema = section('百度推送设定', {
@@ -184,31 +205,6 @@ export class BingSearchOptionsDto extends createZodDto(
   BingSearchOptionsSchema,
 ) {}
 export type BingSearchOptionsConfig = z.infer<typeof BingSearchOptionsSchema>
-
-// ==================== Algolia Search Options ====================
-export const AlgoliaSearchOptionsSchema = section('Algolia Search', {
-  enable: field.plain(z.boolean().optional(), '开启 Algolia Search'),
-  apiKey: field.password(z.string().optional(), 'ApiKey'),
-  appId: field.plain(z.string().optional(), 'AppId'),
-  indexName: field.plain(z.string().optional(), 'IndexName'),
-  maxTruncateSize: field.plain(
-    z.preprocess(
-      (val) => (val ? Number(val) : val),
-      z.number().int().min(100).optional(),
-    ),
-    '最大文档大小',
-    {
-      description:
-        'Algolia 文档大小限制，单位为字节，免费版本为 10K, 填写为 10000',
-    },
-  ),
-})
-export class AlgoliaSearchOptionsDto extends createZodDto(
-  AlgoliaSearchOptionsSchema,
-) {}
-export type AlgoliaSearchOptionsConfig = z.infer<
-  typeof AlgoliaSearchOptionsSchema
->
 
 // ==================== Admin Extra ====================
 export const AdminExtraSchema = section('后台附加设置', {
@@ -354,12 +350,12 @@ export const AISchema = section('AI 设定', {
         '此选项开启后，将会在文章发布后自动生成摘要，需要开启上面的选项，否则无效',
     },
   ),
-  aiSummaryTargetLanguage: field.plain(
-    z.string().optional(),
-    'AI 摘要目标语言',
+  summaryTargetLanguages: field.array(
+    z.array(z.string()).optional(),
+    'AI 摘要目标语言列表',
     {
       description:
-        '生成的摘要目标语言，默认为 `auto`，根据用户的语言自动选择；如果需要固定语言，请填写 [ISO 639-1 语言代码](https://www.w3schools.com/tags/ref_language_codes.asp)',
+        '自动生成摘要的目标语言列表，使用 [ISO 639-1 语言代码](https://www.w3schools.com/tags/ref_language_codes.asp)，如 ["zh", "en", "ja"]',
     },
   ),
   translationModel: field.plain(
@@ -421,9 +417,9 @@ export const configSchemaMapping = {
   friendLinkOptions: FriendLinkOptionsSchema,
   backupOptions: BackupOptionsSchema,
   imageStorageOptions: ImageStorageOptionsSchema,
+  fileUploadOptions: FileUploadOptionsSchema,
   baiduSearchOptions: BaiduSearchOptionsSchema,
   bingSearchOptions: BingSearchOptionsSchema,
-  algoliaSearchOptions: AlgoliaSearchOptionsSchema,
   featureList: FeatureListSchema,
   thirdPartyServiceIntegration: ThirdPartyServiceIntegrationSchema,
   authSecurity: AuthSecuritySchema,
@@ -446,9 +442,9 @@ export const FullConfigSchema = withMeta(
     friendLinkOptions: FriendLinkOptionsSchema,
     backupOptions: BackupOptionsSchema,
     imageStorageOptions: ImageStorageOptionsSchema,
+    fileUploadOptions: FileUploadOptionsSchema,
     baiduSearchOptions: BaiduSearchOptionsSchema,
     bingSearchOptions: BingSearchOptionsSchema,
-    algoliaSearchOptions: AlgoliaSearchOptionsSchema,
     featureList: FeatureListSchema,
     thirdPartyServiceIntegration: ThirdPartyServiceIntegrationSchema,
     authSecurity: AuthSecuritySchema,

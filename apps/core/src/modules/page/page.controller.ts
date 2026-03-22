@@ -8,6 +8,7 @@ import {
   Put,
   Query,
 } from '@nestjs/common'
+
 import { ApiController } from '~/common/decorators/api-controller.decorator'
 import { Auth } from '~/common/decorators/auth.decorator'
 import { HTTPDecorators, Paginator } from '~/common/decorators/http.decorator'
@@ -16,13 +17,20 @@ import { BizException } from '~/common/exceptions/biz.exception'
 import { CannotFindException } from '~/common/exceptions/cant-find.exception'
 import { ErrorCodeEnum } from '~/constants/error-code.constant'
 import {
-  TranslationService,
   type ArticleTranslationInput,
+  TranslationService,
 } from '~/processors/helper/helper.translation.service'
 import { MongoIdDto } from '~/shared/dto/id.dto'
 import { PagerDto } from '~/shared/dto/pager.dto'
+import { applyContentPreference } from '~/utils/content.util'
+
 import { PageModel } from './page.model'
-import { PageDto, PageReorderDto, PartialPageDto } from './page.schema'
+import {
+  PageDetailQueryDto,
+  PageDto,
+  PageReorderDto,
+  PartialPageDto,
+} from './page.schema'
 import { PageService } from './page.service'
 
 @ApiController('pages')
@@ -62,7 +70,10 @@ export class PageController {
           id: doc._id?.toString?.() ?? doc.id ?? String(doc._id),
           title: doc.title,
           text: originalText,
+          subtitle: doc.subtitle,
           meta: doc.meta as { lang?: string } | undefined,
+          contentFormat: doc.contentFormat,
+          content: doc.content,
           modified: doc.modified,
           created: doc.created,
         })
@@ -84,12 +95,11 @@ export class PageController {
         }
         doc.title = translation.title
         doc.text = translation.text
+        doc.subtitle = translation.subtitle
         ;(doc as { isTranslated?: boolean }).isTranslated =
           translation.isTranslated
         ;(doc as { translationMeta?: unknown }).translationMeta =
           translation.translationMeta
-        ;(doc as { availableTranslations?: string[] }).availableTranslations =
-          translation.availableTranslations
         return doc
       })
     }
@@ -110,7 +120,11 @@ export class PageController {
   }
 
   @Get('/slug/:slug')
-  async getPageBySlug(@Param('slug') slug: string, @Lang() lang?: string) {
+  async getPageBySlug(
+    @Param('slug') slug: string,
+    @Query() query: PageDetailQueryDto,
+    @Lang() lang?: string,
+  ) {
     if (typeof slug !== 'string') {
       throw new BizException(ErrorCodeEnum.InvalidSlug)
     }
@@ -130,17 +144,26 @@ export class PageController {
       originalData: {
         title: page.title,
         text: page.text,
+        subtitle: page.subtitle,
       },
     })
 
-    return {
-      ...page,
-      title: translationResult.title,
-      text: translationResult.text,
-      isTranslated: translationResult.isTranslated,
-      translationMeta: translationResult.translationMeta,
-      availableTranslations: translationResult.availableTranslations,
-    }
+    return applyContentPreference(
+      {
+        ...page,
+        title: translationResult.title,
+        text: translationResult.text,
+        subtitle: translationResult.subtitle,
+        ...(translationResult.content && {
+          content: translationResult.content,
+          contentFormat: translationResult.contentFormat,
+        }),
+        isTranslated: translationResult.isTranslated,
+        translationMeta: translationResult.translationMeta,
+        availableTranslations: translationResult.availableTranslations,
+      },
+      query.prefer,
+    )
   }
 
   @Post('/')

@@ -1,5 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common'
+
 import { AiTranslationService } from '~/modules/ai/ai-translation/ai-translation.service'
+import type { TranslationSourceSnapshot } from '~/modules/ai/ai-translation/translation-consistency.types'
+import type { TranslationEntryKeyPath } from '~/modules/ai/ai-translation/translation-entry.model'
+import { TranslationEntryService } from '~/modules/ai/ai-translation/translation-entry.service'
 import { normalizeLanguageCode } from '~/utils/lang.util'
 
 export interface TranslationMeta {
@@ -12,8 +16,11 @@ export interface TranslationMeta {
 export interface TranslationResult {
   title: string
   text: string
+  subtitle?: string | null
   summary?: string | null
   tags?: string[]
+  content?: string
+  contentFormat?: string
   isTranslated: boolean
   translationMeta?: TranslationMeta
   availableTranslations?: string[]
@@ -23,22 +30,15 @@ export type TranslationField = keyof TranslationResult
 export type TranslationResultPick<
   Fields extends TranslationField = TranslationField,
 > = { isTranslated: boolean } & Pick<TranslationResult, Fields>
-
-export interface ArticleTranslationInput {
-  id: string
-  title: string
-  text?: string
-  summary?: string | null
-  tags?: string[]
-  meta?: { lang?: string }
-  modified?: Date | null
-  created?: Date | null
-}
+export type ArticleTranslationInput = TranslationSourceSnapshot
 
 @Injectable()
 export class TranslationService {
   private readonly logger = new Logger(TranslationService.name)
-  constructor(private readonly aiTranslationService: AiTranslationService) {}
+  constructor(
+    private readonly aiTranslationService: AiTranslationService,
+    private readonly translationEntryService: TranslationEntryService,
+  ) {}
 
   async translateArticle(options: {
     articleId: string
@@ -47,6 +47,7 @@ export class TranslationService {
     originalData: {
       title: string
       text: string
+      subtitle?: string | null
       summary?: string | null
       tags?: string[]
     }
@@ -54,30 +55,26 @@ export class TranslationService {
     const { articleId, targetLang, allowHidden, originalData } = options
     const normalizedTarget = normalizeLanguageCode(targetLang)
 
-    const availableTranslations =
-      await this.aiTranslationService.getAvailableLanguagesForArticle(articleId)
-
-    if (!normalizedTarget) {
-      return { ...originalData, isTranslated: false, availableTranslations }
-    }
-
     try {
-      const translation =
-        await this.aiTranslationService.getTranslationForArticle(
+      const { availableTranslations, translation } =
+        await this.aiTranslationService.getTranslationAndAvailableLanguages(
           articleId,
-          normalizedTarget,
+          normalizedTarget || undefined,
           allowHidden ? { ignoreVisibility: true } : undefined,
         )
 
-      if (!translation) {
+      if (!normalizedTarget || !translation) {
         return { ...originalData, isTranslated: false, availableTranslations }
       }
 
       return {
         title: translation.title,
         text: translation.text,
+        subtitle: translation.subtitle ?? originalData.subtitle,
         summary: translation.summary ?? originalData.summary,
         tags: translation.tags ?? originalData.tags,
+        content: translation.content,
+        contentFormat: translation.contentFormat,
         isTranslated: true,
         translationMeta: {
           sourceLang: translation.sourceLang,
@@ -89,7 +86,7 @@ export class TranslationService {
       }
     } catch (error) {
       this.logger.error(error)
-      return { ...originalData, isTranslated: false, availableTranslations }
+      return { ...originalData, isTranslated: false }
     }
   }
 
@@ -106,7 +103,7 @@ export class TranslationService {
     items: T[]
     targetLang?: string
     translationFields?: readonly Fields[]
-    getInput: (item: T) => ArticleTranslationInput
+    getInput: (item: T) => TranslationSourceSnapshot
     applyResult: (
       item: T,
       result: TranslationResultPick<Fields> | undefined,
@@ -161,8 +158,13 @@ export class TranslationService {
 
     if (fields.includes('title')) selectFields.add('title')
     if (fields.includes('text')) selectFields.add('text')
+    if (fields.includes('subtitle')) selectFields.add('subtitle')
     if (fields.includes('summary')) selectFields.add('summary')
     if (fields.includes('tags')) selectFields.add('tags')
+    if (fields.includes('content')) {
+      selectFields.add('content')
+      selectFields.add('contentFormat')
+    }
     if (fields.includes('translationMeta')) {
       selectFields.add('lang')
       selectFields.add('created')
@@ -175,7 +177,7 @@ export class TranslationService {
   async translateArticleList<
     Fields extends TranslationField = TranslationField,
   >(options: {
-    articles: ArticleTranslationInput[]
+    articles: TranslationSourceSnapshot[]
     targetLang?: string
     translationFields?: readonly Fields[]
   }): Promise<Map<string, TranslationResultPick<Fields>>> {
@@ -183,10 +185,11 @@ export class TranslationService {
     const defaultFields: readonly TranslationField[] = [
       'title',
       'text',
+      'subtitle',
       'summary',
       'tags',
+      'content',
       'translationMeta',
-      'availableTranslations',
     ]
     const translationFields = (options.translationFields ??
       defaultFields) as readonly Fields[]
@@ -202,6 +205,7 @@ export class TranslationService {
             {
               title: article.title,
               text: article.text ?? '',
+              subtitle: article.subtitle,
               summary: article.summary,
               tags: article.tags,
               isTranslated: false,
@@ -213,7 +217,7 @@ export class TranslationService {
     }
 
     try {
-      const translationMap =
+      const { validTranslations: translationMap } =
         await this.aiTranslationService.getValidTranslationsForArticles(
           articles,
           normalizedTarget,
@@ -230,6 +234,7 @@ export class TranslationService {
                 {
                   title: article.title,
                   text: article.text ?? '',
+                  subtitle: article.subtitle,
                   summary: article.summary,
                   tags: article.tags,
                   isTranslated: false,
@@ -245,8 +250,11 @@ export class TranslationService {
               {
                 title: translation.title,
                 text: translation.text,
+                subtitle: translation.subtitle ?? article.subtitle,
                 summary: translation.summary ?? article.summary,
                 tags: translation.tags ?? article.tags,
+                content: translation.content,
+                contentFormat: translation.contentFormat,
                 isTranslated: true,
                 translationMeta: translationFieldList.includes(
                   'translationMeta',
@@ -273,6 +281,7 @@ export class TranslationService {
             {
               title: article.title,
               text: article.text ?? '',
+              subtitle: article.subtitle,
               summary: article.summary,
               tags: article.tags,
               isTranslated: false,
@@ -281,6 +290,44 @@ export class TranslationService {
           ),
         ]),
       )
+    }
+  }
+
+  async getEntityTranslations(
+    keyPath: TranslationEntryKeyPath,
+    lang: string,
+    lookupKeys: string[],
+  ): Promise<Map<string, string>> {
+    const normalized = normalizeLanguageCode(lang)
+    if (!normalized || !lookupKeys.length) return new Map()
+    try {
+      return await this.translationEntryService.getTranslations(
+        keyPath,
+        normalized,
+        lookupKeys,
+      )
+    } catch (error) {
+      this.logger.error(error)
+      return new Map()
+    }
+  }
+
+  async getDictTranslations(
+    keyPath: TranslationEntryKeyPath,
+    lang: string,
+    sourceTexts: string[],
+  ): Promise<Map<string, string>> {
+    const normalized = normalizeLanguageCode(lang)
+    if (!normalized || !sourceTexts.length) return new Map()
+    try {
+      return await this.translationEntryService.getTranslationsForDict(
+        keyPath,
+        normalized,
+        sourceTexts,
+      )
+    } catch (error) {
+      this.logger.error(error)
+      return new Map()
     }
   }
 }

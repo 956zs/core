@@ -20,8 +20,10 @@ export class GetTranslationStreamQueryDto extends createZodDto(
 export const UpdateTranslationSchema = z.object({
   title: z.string().optional(),
   text: z.string().optional(),
+  subtitle: z.string().nullable().optional(),
   summary: z.string().optional(),
   tags: z.array(z.string()).optional(),
+  content: z.string().optional(),
 })
 
 export class UpdateTranslationDto extends createZodDto(

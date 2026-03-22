@@ -2,6 +2,7 @@ export declare class SeoOptionModel {
   title: string
   description: string
   icon?: string
+  iconDark?: string
   keywords?: string[]
 }
 export declare class UrlOptionModel {
@@ -32,6 +33,8 @@ export declare class MailOptionsModel {
 }
 export declare class CommentOptionsModel {
   antiSpam: boolean
+  disableComment: boolean
+  allowGuestComment: boolean
   spamKeywords?: string[]
   blockIps?: string[]
   disableNoChinese?: boolean
@@ -50,13 +53,6 @@ export declare class BaiduSearchOptionsModel {
 export declare class BingSearchOptionsModel {
   enable: boolean
   token?: string
-}
-
-export declare class AlgoliaSearchOptionsModel {
-  enable: boolean
-  apiKey?: string
-  appId?: string
-  indexName?: string
 }
 
 export declare class AdminExtraModel {
@@ -81,7 +77,6 @@ export interface IConfig {
   commentOptions: CommentOptionsModel
   backupOptions: BackupOptionsModel
   baiduSearchOptions: BaiduSearchOptionsModel
-  algoliaSearchOptions: AlgoliaSearchOptionsModel
   adminExtra: AdminExtraModel
   thirdPartyServiceIntegration: ThirdPartyServiceIntegrationModel
 }

@@ -1,9 +1,7 @@
-import type { CategoryModel } from './category'
 import type { NoteModel } from './note'
-import type { PageModel } from './page'
 import type { PostModel } from './post'
 import type { SayModel } from './say'
-import type { SeoOptionModel } from './setting'
+import type { CommentOptionsModel, SeoOptionModel } from './setting'
 import type { UserModel } from './user'
 
 export interface AggregateAIConfig {
@@ -14,8 +12,10 @@ export interface AggregateRoot {
   user: UserModel
   seo: SeoOptionModel
   url: Url
-  categories: CategoryModel[]
-  pageMeta: Pick<PageModel, 'title' | 'id' | 'slug' | 'order'>[] | null
+  commentOptions?: Pick<
+    CommentOptionsModel,
+    'disableComment' | 'allowGuestComment'
+  >
   /**
    * @available 4.2.2
    */
@@ -30,6 +30,12 @@ export interface AggregateRootWithTheme<Theme = unknown> extends AggregateRoot {
   theme?: Theme
 }
 
+export interface AggregateSiteInfo {
+  user: Pick<UserModel, 'id' | 'name' | 'socialIds'>
+  seo: SeoOptionModel
+  url: Pick<Url, 'webUrl'>
+}
+
 export interface Url {
   wsUrl: string
   serverUrl: string
@@ -38,12 +44,12 @@ export interface Url {
 
 export interface AggregateTopNote extends Pick<
   NoteModel,
-  'id' | 'title' | 'created' | 'nid' | 'images'
+  'id' | 'title' | 'created' | 'nid' | 'images' | 'mood' | 'weather'
 > {}
 
 export interface AggregateTopPost extends Pick<
   PostModel,
-  'id' | 'slug' | 'created' | 'title' | 'category' | 'images'
+  'id' | 'slug' | 'created' | 'title' | 'category' | 'images' | 'summary'
 > {}
 
 export interface AggregateTop {
@@ -75,6 +81,34 @@ export interface TimelineData {
     'id' | 'title' | 'slug' | 'created' | 'modified' | 'category'
   > & { url: string })[]
 }
+
+export interface LatestPostItem extends Pick<
+  PostModel,
+  'id' | 'title' | 'slug' | 'created' | 'modified' | 'tags'
+> {
+  category: Pick<CategoryModel, 'name' | 'slug'> | null
+}
+
+export interface LatestNoteItem extends Pick<
+  NoteModel,
+  | 'id'
+  | 'title'
+  | 'nid'
+  | 'created'
+  | 'modified'
+  | 'mood'
+  | 'weather'
+  | 'bookmark'
+> {}
+
+export interface LatestData {
+  posts?: LatestPostItem[]
+  notes?: LatestNoteItem[]
+}
+
+export type LatestCombinedItem =
+  | (LatestPostItem & { type: 'post' })
+  | (LatestNoteItem & { type: 'note' })
 
 export interface AggregateStat {
   allComments: number

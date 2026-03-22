@@ -10,6 +10,7 @@ import type {
   NoteWrappedWithLikedPayload,
 } from '~/models/note'
 import { autoBind } from '~/utils/auto-bind'
+
 import type { HTTPClient } from '../core/client'
 import type { SortOptions } from './base'
 
@@ -27,13 +28,18 @@ export type NoteListOptions = {
   year?: number
   sortBy?: 'weather' | 'mood' | 'title' | 'created' | 'modified'
   sortOrder?: 1 | -1
+  lang?: string
+  withSummary?: boolean
 }
 
 export type NoteByNidOptions = {
   password?: string
   single?: boolean
   lang?: string
+  prefer?: 'lexical'
 }
+
+export type NoteBySlugDateOptions = NoteByNidOptions
 
 export type NoteMiddleListOptions = {
   lang?: string
@@ -45,7 +51,7 @@ export type NoteTopicListOptions = SortOptions & {
 
 export type NoteTimelineItem = Pick<
   NoteModel,
-  'id' | 'title' | 'nid' | 'created' | 'isPublished'
+  'id' | 'title' | 'nid' | 'slug' | 'created' | 'isPublished'
 > & {
   isTranslated?: boolean
   translationMeta?: TranslationMeta
@@ -119,12 +125,36 @@ export class NoteController<ResponseWrapper> implements IController {
     NoteWrappedWithLikedAndTranslationPayload,
     ResponseWrapper
   > {
-    const { password, single, lang } = options || {}
+    const { password, single, lang, prefer } = options || {}
     return this.proxy.nid(nid.toString()).get({
       params: {
         password,
         single: single ? '1' : undefined,
         lang,
+        prefer,
+      },
+    })
+  }
+
+  getNoteBySlugDate(
+    year: number,
+    month: number,
+    day: number,
+    slug: string,
+    options?: NoteBySlugDateOptions,
+  ): RequestProxyResult<
+    NoteWrappedWithLikedAndTranslationPayload,
+    ResponseWrapper
+  > {
+    const { password, single, lang, prefer } = options || {}
+    return this.proxy(year.toString())(month.toString())(day.toString())(
+      slug,
+    ).get({
+      params: {
+        password,
+        single: single ? '1' : undefined,
+        lang,
+        prefer,
       },
     })
   }
@@ -134,7 +164,7 @@ export class NoteController<ResponseWrapper> implements IController {
    */
 
   getList(page = 1, perPage = 10, options: NoteListOptions = {}) {
-    const { select, sortBy, sortOrder, year } = options
+    const { select, sortBy, sortOrder, year, lang, withSummary } = options
     return this.proxy.get<PaginateResult<NoteModel>>({
       params: {
         page,
@@ -143,6 +173,8 @@ export class NoteController<ResponseWrapper> implements IController {
         sortBy,
         sortOrder,
         year,
+        lang,
+        withSummary: withSummary ? '1' : undefined,
       },
     })
   }

@@ -1,8 +1,12 @@
 import { URL } from 'node:url'
+
 import { forwardRef, Inject, Injectable } from '@nestjs/common'
 import { OnEvent } from '@nestjs/event-emitter'
 import type { ReturnModelType } from '@typegoose/typegoose'
 import type { AnyParamConstructor } from '@typegoose/typegoose/lib/types'
+import { pick } from 'es-toolkit/compat'
+import type { PipelineStage } from 'mongoose'
+
 import {
   API_CACHE_PREFIX,
   CacheKeys,
@@ -19,8 +23,7 @@ import { RedisService } from '~/processors/redis/redis.service'
 import { addYearCondition } from '~/transformers/db-query.transformer'
 import { getRedisKey } from '~/utils/redis.util'
 import { getShortDate } from '~/utils/time.util'
-import { pick } from 'es-toolkit/compat'
-import type { PipelineStage } from 'mongoose'
+
 import { AnalyzeService } from '../analyze/analyze.service'
 import type { CategoryModel } from '../category/category.model'
 import type { CategoryService } from '../category/category.service'
@@ -29,6 +32,7 @@ import { CommentService } from '../comment/comment.service'
 import { ConfigsService } from '../configs/configs.service'
 import { LinkState } from '../link/link.model'
 import { LinkService } from '../link/link.service'
+import type { NoteModel } from '../note/note.model'
 import { NoteService } from '../note/note.service'
 import { OwnerService } from '../owner/owner.service'
 import { PageService } from '../page/page.service'
@@ -78,7 +82,7 @@ export class AggregateService {
 
   getAllPages() {
     return this.pageService.model
-      .find({}, 'title _id slug order')
+      .find({}, 'title _id slug order created modified')
       .sort({
         order: -1,
         modified: -1,
@@ -95,7 +99,7 @@ export class AggregateService {
       .sort({ created: -1 })
       .limit(size)
       .select(
-        '_id title name slug avatar nid created meta images tags modified contentFormat',
+        '_id title name slug avatar nid created meta images tags modified contentFormat summary mood weather',
       )
   }
 
@@ -132,6 +136,74 @@ export class AggregateService {
     ])
 
     return { notes, posts, says, recently }
+  }
+
+  async getLatest(limit = 5, types?: TimelineType[], combined = false) {
+    const shouldFetchPosts = !types || types.includes(TimelineType.Post)
+    const shouldFetchNotes = !types || types.includes(TimelineType.Note)
+
+    const getPosts = () =>
+      this.postService.model
+        .find({ isPublished: true })
+        .sort({ created: -1 })
+        .limit(limit)
+        .select('_id title slug created modified tags')
+        .populate('categoryId', 'name slug')
+        .lean()
+        .then((list) =>
+          list.map((item) => ({
+            ...pick(item, [
+              '_id',
+              'title',
+              'slug',
+              'created',
+              'modified',
+              'tags',
+            ]),
+            category: item.categoryId
+              ? pick(item.categoryId as any, ['name', 'slug'])
+              : null,
+          })),
+        )
+
+    const getNotes = () =>
+      this.noteService.model
+        .find(
+          { isPublished: true, password: undefined },
+          '_id nid title created modified mood weather bookmark',
+        )
+        .sort({ created: -1 })
+        .limit(limit)
+        .lean()
+
+    const tasks: Promise<any>[] = []
+    if (shouldFetchPosts) tasks.push(getPosts())
+    if (shouldFetchNotes) tasks.push(getNotes())
+
+    const results = await Promise.all(tasks)
+
+    let postIdx = 0
+    const posts = shouldFetchPosts ? results[postIdx++] : undefined
+    const notes = shouldFetchNotes ? results[postIdx] : undefined
+
+    if (combined) {
+      const items: any[] = []
+      if (posts) {
+        for (const p of posts) items.push({ ...p, type: 'post' })
+      }
+      if (notes) {
+        for (const n of notes) items.push({ ...n, type: 'note' })
+      }
+      items.sort(
+        (a, b) => new Date(b.created).getTime() - new Date(a.created).getTime(),
+      )
+      return items.slice(0, limit)
+    }
+
+    const data: any = {}
+    if (posts) data.posts = posts
+    if (notes) data.notes = notes
+    return data
   }
 
   async getTimeline(
@@ -229,7 +301,10 @@ export class AggregateService {
         .then((list) =>
           list.map((doc) => {
             return {
-              url: new URL(`/notes/${doc.nid}`, baseURL),
+              url: new URL(
+                this.noteService.buildPublicPath(doc as NoteModel),
+                baseURL,
+              ),
               published_at: doc.modified
                 ? new Date(doc.modified)
                 : new Date(doc.created!),
@@ -525,6 +600,38 @@ export class AggregateService {
       if (!result) return prev
       return prev + result.totalCharacters
     }, 0)
+  }
+
+  async getSiteInfo() {
+    const [postCount, noteCount, totalWordCount, firstPost, firstNote] =
+      await Promise.all([
+        this.postService.model.countDocuments(),
+        this.noteService.model.countDocuments(),
+        this.getAllSiteWordsCount(),
+        this.postService.model
+          .findOne({}, 'created', { sort: { created: 1 } })
+          .lean(),
+        this.noteService.model
+          .findOne({}, 'created', { sort: { created: 1 } })
+          .lean(),
+      ])
+
+    const firstPostDate = firstPost?.created
+    const firstNoteDate = firstNote?.created
+    let firstPublishDate: Date | null
+    if (firstPostDate && firstNoteDate) {
+      firstPublishDate =
+        firstPostDate < firstNoteDate ? firstPostDate : firstNoteDate
+    } else {
+      firstPublishDate = firstPostDate || firstNoteDate || null
+    }
+
+    return {
+      postCount,
+      noteCount,
+      totalWordCount,
+      firstPublishDate: firstPublishDate?.toISOString() ?? null,
+    }
   }
 
   /**

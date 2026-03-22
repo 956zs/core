@@ -4,13 +4,17 @@ import type { SortOrder } from '~/interfaces/options'
 import type { IRequestHandler, RequestProxyResult } from '~/interfaces/request'
 import type {
   AggregateRootWithTheme,
+  AggregateSiteInfo,
   AggregateStat,
   AggregateTop,
+  LatestCombinedItem,
+  LatestData,
   TimelineData,
   TimelineType,
 } from '~/models/aggregate'
 import { sortOrderToNumber } from '~/utils'
 import { autoBind } from '~/utils/auto-bind'
+
 import type { HTTPClient } from '../core'
 
 declare module '../core/client' {
@@ -45,6 +49,10 @@ export class AggregateController<ResponseWrapper> implements IController {
     })
   }
 
+  getSiteMetadata(): RequestProxyResult<AggregateSiteInfo, ResponseWrapper> {
+    return this.proxy.site.get<AggregateSiteInfo>()
+  }
+
   /**
    * 获取最新发布的内容
    */
@@ -66,6 +74,31 @@ export class AggregateController<ResponseWrapper> implements IController {
       },
     })
   }
+  getLatest(options: {
+    limit?: number
+    types?: TimelineType[]
+    combined: true
+  }): RequestProxyResult<LatestCombinedItem[], ResponseWrapper>
+  getLatest(options?: {
+    limit?: number
+    types?: TimelineType[]
+    combined?: false
+  }): RequestProxyResult<LatestData, ResponseWrapper>
+  getLatest(options?: {
+    limit?: number
+    types?: TimelineType[]
+    combined?: boolean
+  }): RequestProxyResult<LatestData | LatestCombinedItem[], ResponseWrapper> {
+    const { limit, types, combined } = options || {}
+    return this.proxy.latest.get<LatestData | LatestCombinedItem[]>({
+      params: {
+        limit,
+        types: types?.join(','),
+        combined,
+      },
+    })
+  }
+
   /**
    * 获取聚合数据统计
    */

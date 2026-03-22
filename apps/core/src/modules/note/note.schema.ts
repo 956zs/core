@@ -1,16 +1,19 @@
+import { createZodDto } from 'nestjs-zod'
+import { z } from 'zod'
+
 import {
   zCoerceBoolean,
   zCoerceInt,
   zLang,
   zMongoId,
   zNonEmptyString,
+  zPrefer,
   zTransformEmptyNull,
 } from '~/common/zod'
 import { PagerSchema } from '~/shared/dto/pager.dto'
 import { WriteBaseSchema } from '~/shared/schema'
 import { ImageSchema } from '~/shared/schema/image.schema'
-import { createZodDto } from 'nestjs-zod'
-import { z } from 'zod'
+import { ContentFormat } from '~/shared/types/content-format.type'
 
 /**
  * Coordinate schema
@@ -28,6 +31,13 @@ export const NoteSchema = WriteBaseSchema.extend({
     .string()
     .transform((val) => (val.length === 0 ? '无题' : val))
     .default('无题'),
+  slug: z.preprocess((val) => {
+    if (typeof val !== 'string') {
+      return val
+    }
+    const trimmed = val.trim()
+    return trimmed.length === 0 ? undefined : trimmed
+  }, z.string().optional()),
   isPublished: z.boolean().default(true).optional(),
   password: zTransformEmptyNull(z.string()).optional(),
   publicAt: z
@@ -51,8 +61,21 @@ export class NoteDto extends createZodDto(NoteSchema) {}
 
 /**
  * Partial note schema for PATCH operations
+ * Override fields with .default() to prevent defaults from being applied during partial updates
  */
-export const PartialNoteSchema = NoteSchema.partial()
+export const PartialNoteSchema = NoteSchema.extend({
+  title: z
+    .string()
+    .transform((val) => (val.length === 0 ? '无题' : val))
+    .optional(),
+  contentFormat: z
+    .enum([ContentFormat.Markdown, ContentFormat.Lexical])
+    .optional(),
+  meta: z.record(z.string(), z.any()).optional().nullable(),
+  isPublished: z.boolean().optional(),
+  bookmark: z.boolean().optional(),
+  images: z.array(ImageSchema).optional(),
+}).partial()
 
 export class PartialNoteDto extends createZodDto(PartialNoteSchema) {}
 
@@ -67,6 +90,8 @@ export const NoteQuerySchema = PagerSchema.extend({
     (val) => (typeof val === 'string' ? Math.trunc(Number(val)) : val),
     z.union([z.literal(1), z.literal(-1)]).optional(),
   ),
+  lang: zLang,
+  withSummary: zCoerceBoolean.optional(),
 })
 
 export class NoteQueryDto extends createZodDto(NoteQuerySchema) {}
@@ -78,6 +103,7 @@ export const NotePasswordQuerySchema = z.object({
   password: zNonEmptyString.optional(),
   single: zCoerceBoolean.optional(),
   lang: zLang,
+  prefer: zPrefer,
 })
 
 export class NotePasswordQueryDto extends createZodDto(
@@ -105,6 +131,17 @@ export const NidTypeSchema = z.object({
 })
 
 export class NidType extends createZodDto(NidTypeSchema) {}
+
+export const NoteSlugDateParamsSchema = z.object({
+  year: zCoerceInt.min(1970),
+  month: zCoerceInt.min(1).max(12),
+  day: zCoerceInt.min(1).max(31),
+  slug: zNonEmptyString,
+})
+
+export class NoteSlugDateParamsDto extends createZodDto(
+  NoteSlugDateParamsSchema,
+) {}
 
 /**
  * Set note publish status schema
@@ -134,6 +171,7 @@ export type NoteQueryInput = z.infer<typeof NoteQuerySchema>
 export type NotePasswordQueryInput = z.infer<typeof NotePasswordQuerySchema>
 export type ListQueryInput = z.infer<typeof ListQuerySchema>
 export type NidTypeInput = z.infer<typeof NidTypeSchema>
+export type NoteSlugDateParamsInput = z.infer<typeof NoteSlugDateParamsSchema>
 export type SetNotePublishStatusInput = z.infer<
   typeof SetNotePublishStatusSchema
 >

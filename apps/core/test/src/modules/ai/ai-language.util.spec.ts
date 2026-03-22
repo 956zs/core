@@ -1,9 +1,10 @@
+import { describe, expect, it } from 'vitest'
+
 import {
   getLanguageName,
   parseLanguageCode,
-  resolveTargetLanguage,
+  resolveTargetLanguages,
 } from '~/modules/ai/ai-language.util'
-import { describe, expect, it } from 'vitest'
 
 describe('ai-language.util', () => {
   describe('parseLanguageCode', () => {
@@ -48,50 +49,25 @@ describe('ai-language.util', () => {
     })
   })
 
-  describe('resolveTargetLanguage', () => {
-    it('should use configured language when not auto', () => {
-      const result = resolveTargetLanguage(
-        { preferredLang: 'ja', acceptLanguage: 'en-US' },
-        { configuredLanguage: 'ko' },
-      )
-      expect(result).toBe('ko')
+  describe('resolveTargetLanguages', () => {
+    it('should return explicit languages when provided', () => {
+      expect(resolveTargetLanguages(['en', 'ja'], ['ko'])).toEqual(['en', 'ja'])
     })
 
-    it('should use preferredLang in auto mode', () => {
-      const result = resolveTargetLanguage(
-        { preferredLang: 'ja', acceptLanguage: 'en-US' },
-        { configuredLanguage: 'auto' },
-      )
-      expect(result).toBe('ja')
+    it('should fallback to configured when explicit is empty', () => {
+      expect(resolveTargetLanguages([], ['ko', 'ja'])).toEqual(['ko', 'ja'])
     })
 
-    it('should use acceptLanguage when no preferredLang in auto mode', () => {
-      const result = resolveTargetLanguage(
-        { acceptLanguage: 'en-US' },
-        { configuredLanguage: 'auto' },
-      )
-      expect(result).toBe('en')
+    it('should fallback to configured when explicit is undefined', () => {
+      expect(resolveTargetLanguages(undefined, ['zh'])).toEqual(['zh'])
     })
 
-    it('should use default language when no user preference', () => {
-      const result = resolveTargetLanguage(
-        {},
-        { configuredLanguage: 'auto', defaultLanguage: 'zh' },
-      )
-      expect(result).toBe('zh')
+    it('should return empty array when both are undefined', () => {
+      expect(resolveTargetLanguages(undefined, undefined)).toEqual([])
     })
 
-    it('should fallback to default when no config', () => {
-      const result = resolveTargetLanguage({}, {})
-      expect(result).toBe('zh') // DEFAULT_SUMMARY_LANG
-    })
-
-    it('should handle undefined configuredLanguage as auto', () => {
-      const result = resolveTargetLanguage(
-        { preferredLang: 'fr' },
-        { configuredLanguage: undefined },
-      )
-      expect(result).toBe('fr')
+    it('should return empty array when both are empty', () => {
+      expect(resolveTargetLanguages([], [])).toEqual([])
     })
   })
 })

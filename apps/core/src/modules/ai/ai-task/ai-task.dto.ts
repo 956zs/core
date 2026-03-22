@@ -1,11 +1,13 @@
-import { TaskStatus } from '~/processors/task-queue'
 import { createZodDto } from 'nestjs-zod'
 import { z } from 'zod'
+
+import { TaskStatus } from '~/processors/task-queue'
+
 import { AITaskType } from './ai-task.types'
 
 export const CreateSummaryTaskSchema = z.object({
   refId: z.string(),
-  lang: z.string().optional(),
+  targetLanguages: z.array(z.string()).optional(),
 })
 
 export class CreateSummaryTaskDto extends createZodDto(
@@ -54,6 +56,7 @@ export const GetTasksQuerySchema = z.object({
       AITaskType.Translation,
       AITaskType.TranslationBatch,
       AITaskType.TranslationAll,
+      AITaskType.SlugBackfill,
     ])
     .optional(),
   page: z.coerce.number().int().min(1).default(1),
@@ -72,6 +75,7 @@ export const DeleteTasksQuerySchema = z.object({
       AITaskType.Translation,
       AITaskType.TranslationBatch,
       AITaskType.TranslationAll,
+      AITaskType.SlugBackfill,
     ])
     .optional(),
   before: z.coerce.number().int().positive(),

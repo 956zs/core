@@ -1,15 +1,4 @@
-import { createRedisProvider } from '@/mock/modules/redis.mock'
 import { APP_INTERCEPTOR } from '@nestjs/core'
-import { apiRoutePrefix } from '~/common/decorators/api-controller.decorator'
-import { OptionModel } from '~/modules/configs/configs.model'
-import { DraftModel } from '~/modules/draft/draft.model'
-import { DraftService } from '~/modules/draft/draft.service'
-import { NoteController } from '~/modules/note/note.controller'
-import { NoteModel } from '~/modules/note/note.model'
-import { NoteService } from '~/modules/note/note.service'
-import { HttpService } from '~/processors/helper/helper.http.service'
-import { ImageService } from '~/processors/helper/helper.image.service'
-import { LexicalService } from '~/processors/helper/helper.lexical.service'
 import { createE2EApp } from 'test/helper/create-e2e-app'
 import { authPassHeader } from 'test/mock/guard/auth.guard'
 import { MockingCountingInterceptor } from 'test/mock/interceptors/counting.interceptor'
@@ -19,15 +8,92 @@ import { configProvider } from 'test/mock/modules/config.mock'
 import { gatewayProviders } from 'test/mock/modules/gateway.mock'
 import { countingServiceProvider } from 'test/mock/processors/counting.mock'
 import { eventEmitterProvider } from 'test/mock/processors/event.mock'
-import {
-  fileReferenceProvider,
-  imageMigrationProvider,
-} from 'test/mock/processors/file.mock'
-import { translationProvider } from 'test/mock/processors/translation.mock'
+import { fileReferenceProvider } from 'test/mock/processors/file.mock'
+import { vi } from 'vitest'
+
+import { createRedisProvider } from '@/mock/modules/redis.mock'
+import { apiRoutePrefix } from '~/common/decorators/api-controller.decorator'
+import { AiSummaryService } from '~/modules/ai/ai-summary/ai-summary.service'
+import { AiSlugBackfillService } from '~/modules/ai/ai-writer/ai-slug-backfill.service'
+import { AiWriterService } from '~/modules/ai/ai-writer/ai-writer.service'
+import { OptionModel } from '~/modules/configs/configs.model'
+import { DraftModel } from '~/modules/draft/draft.model'
+import { DraftService } from '~/modules/draft/draft.service'
+import { DraftHistoryService } from '~/modules/draft/draft-history.service'
+import { NoteController } from '~/modules/note/note.controller'
+import { NoteModel } from '~/modules/note/note.model'
+import { NoteService } from '~/modules/note/note.service'
+import { SlugTrackerModel } from '~/modules/slug-tracker/slug-tracker.model'
+import { SlugTrackerService } from '~/modules/slug-tracker/slug-tracker.service'
+import { HttpService } from '~/processors/helper/helper.http.service'
+import { ImageService } from '~/processors/helper/helper.image.service'
+import { LexicalService } from '~/processors/helper/helper.lexical.service'
+import { TranslationService } from '~/processors/helper/helper.translation.service'
+
 import MockDbData from './note.e2e-mock.db'
 
 describe('NoteController (e2e)', async () => {
   let model: MongooseModel<NoteModel>
+  const translationServiceMock = {
+    translateArticle: vi.fn(async (options) => ({
+      ...options.originalData,
+      title: options.targetLang
+        ? `${options.originalData.title} [${options.targetLang}]`
+        : options.originalData.title,
+      text: options.targetLang
+        ? `${options.originalData.text} [${options.targetLang}]`
+        : options.originalData.text,
+      isTranslated: Boolean(options.targetLang),
+      ...(options.targetLang && {
+        translationMeta: {
+          sourceLang: 'zh',
+          targetLang: options.targetLang,
+          translatedAt: new Date('2026-03-14T00:00:00.000Z'),
+        },
+        availableTranslations: [options.targetLang],
+      }),
+    })),
+    translateList: vi.fn(async ({ items, targetLang, applyResult }) =>
+      items.map((item) =>
+        applyResult(
+          item,
+          targetLang
+            ? {
+                isTranslated: true,
+                title: `${item.title} [${targetLang}]`,
+                translationMeta: {
+                  sourceLang: 'zh',
+                  targetLang,
+                  translatedAt: new Date('2026-03-14T00:00:00.000Z'),
+                },
+              }
+            : undefined,
+        ),
+      ),
+    ),
+    translateArticleList: vi.fn(async ({ articles, targetLang }) => {
+      return new Map(
+        articles.map((article) => [
+          article.id,
+          {
+            ...article,
+            title: targetLang
+              ? `${article.title} [${targetLang}]`
+              : article.title,
+            text: targetLang ? `${article.text} [${targetLang}]` : article.text,
+            isTranslated: Boolean(targetLang),
+            ...(targetLang && {
+              translationMeta: {
+                sourceLang: 'zh',
+                targetLang,
+                translatedAt: new Date('2026-03-14T00:00:00.000Z'),
+              },
+            }),
+          },
+        ]),
+      )
+    }),
+  }
   const proxy = createE2EApp({
     controllers: [NoteController],
     providers: [
@@ -51,13 +117,39 @@ describe('NoteController (e2e)', async () => {
       authProvider,
 
       countingServiceProvider,
+      DraftHistoryService,
       DraftService,
       fileReferenceProvider,
-      imageMigrationProvider,
-      translationProvider,
+      {
+        provide: TranslationService,
+        useValue: translationServiceMock,
+      },
+      SlugTrackerService,
+      {
+        provide: AiWriterService,
+        useValue: {
+          generateSlugByTitleViaOpenAI: vi
+            .fn()
+            .mockResolvedValue({ slug: 'generated-note-slug' }),
+        },
+      },
+      {
+        provide: AiSummaryService,
+        useValue: {
+          batchGetSummariesByRefIds: vi.fn().mockResolvedValue(new Map()),
+        },
+      },
+      {
+        provide: AiSlugBackfillService,
+        useValue: {
+          createBackfillTaskForNotes: vi
+            .fn()
+            .mockResolvedValue({ taskId: 'task-1', created: true }),
+        },
+      },
     ],
     imports: [],
-    models: [NoteModel, OptionModel, DraftModel],
+    models: [NoteModel, OptionModel, DraftModel, SlugTrackerModel],
     async pourData(modelMap) {
       // @ts-ignore
       const { model: _model } = modelMap.get(NoteModel) as {
@@ -72,6 +164,10 @@ describe('NoteController (e2e)', async () => {
 
   afterAll(async () => {
     await model.deleteMany({})
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
   })
 
   test('GET /notes', async () => {
@@ -90,9 +186,27 @@ describe('NoteController (e2e)', async () => {
     expect(data).toMatchSnapshot()
   })
 
+  test('GET /notes?lang=en translates list titles', async () => {
+    const { app } = proxy
+    const res = await app.inject({
+      method: 'GET',
+      url: `${apiRoutePrefix}/notes`,
+      query: {
+        lang: 'en',
+      },
+    })
+
+    expect(res.statusCode).toBe(200)
+    const data = res.json()
+
+    expect(translationServiceMock.translateArticleList).toHaveBeenCalledOnce()
+    expect(data.data[0]?.title).toContain('[en]')
+  })
+
   const createdNoteData: Partial<NoteModel> = {
     title: 'Note 2',
     text: 'Content 2',
+    slug: 'note-2',
 
     allowComment: true,
     // use cutsom date
@@ -114,7 +228,29 @@ describe('NoteController (e2e)', async () => {
     expect(res.statusCode).toBe(201)
     createdNoteData.id = data.id
     createdNoteData.nid = data.nid
+    createdNoteData.slug = data.slug
     delete data.id
+    expect(data).toMatchSnapshot()
+  })
+
+  test('GET /notes/:year/:month/:day/:slug', async () => {
+    const { app } = proxy
+    const res = await app.inject({
+      method: 'GET',
+      url: `${apiRoutePrefix}/notes/2023/1/17/note-2`,
+    })
+
+    expect(res.statusCode).toBe(200)
+    const data = res.json()
+    delete data.id
+    delete data.data.id
+    delete data.data.modified
+    if (data.prev) {
+      delete data.prev.id
+    }
+    if (data.next) {
+      delete data.next.id
+    }
     expect(data).toMatchSnapshot()
   })
 
@@ -126,6 +262,7 @@ describe('NoteController (e2e)', async () => {
       payload: {
         title: 'Note 2 (updated)',
         text: `Content 2 (updated)`,
+        slug: 'note-2-updated',
         mood: 'happy',
         weather: 'sunny',
       },
@@ -135,6 +272,28 @@ describe('NoteController (e2e)', async () => {
     })
 
     expect(res.statusCode).toBe(204)
+    createdNoteData.slug = 'note-2-updated'
+  })
+
+  test('GET /notes/:year/:month/:day/:slug should resolve tracked old slug', async () => {
+    const { app } = proxy
+    const res = await app.inject({
+      method: 'GET',
+      url: `${apiRoutePrefix}/notes/2023/1/17/note-2`,
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().data.slug).toBe('note-2-updated')
+  })
+
+  test('GET /notes/:year/:month/:day/:slug should 404 when date mismatch', async () => {
+    const { app } = proxy
+    const res = await app.inject({
+      method: 'GET',
+      url: `${apiRoutePrefix}/notes/2023/1/16/note-2-updated`,
+    })
+
+    expect(res.statusCode).toBe(404)
   })
 
   test('Get patched note', async () => {
@@ -169,6 +328,9 @@ describe('NoteController (e2e)', async () => {
       delete note.modified
     })
 
+    expect(data.data.some((note) => note.slug === createdNoteData.slug)).toBe(
+      true,
+    )
     expect(data).toMatchSnapshot()
   })
 
@@ -316,7 +478,9 @@ describe('NoteController (e2e)', async () => {
       title: 'Note 4',
       text: 'Content 3',
       allowComment: true,
+      slug: 'note-4',
       password: 'password',
+      created: new Date('2021-03-22T00:00:00.000Z'),
     })
     mockDataWithPasswordNid = note.nid
     return () => model.deleteOne({ _id: note._id })
@@ -328,6 +492,17 @@ describe('NoteController (e2e)', async () => {
     const res = await app.inject({
       method: 'GET',
       url: `${apiRoutePrefix}/notes/nid/${mockDataWithPasswordNid}`,
+    })
+
+    expect(res.statusCode).toBe(403)
+  })
+
+  test('GET /:year/:month/:day/:slug, should ban if has password', async () => {
+    const app = proxy.app
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `${apiRoutePrefix}/notes/2021/3/22/note-4`,
     })
 
     expect(res.statusCode).toBe(403)

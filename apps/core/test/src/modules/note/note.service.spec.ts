@@ -1,30 +1,34 @@
 import { Test } from '@nestjs/testing'
-import { CannotFindException } from '~/common/exceptions/cant-find.exception'
-import { CommentService } from '~/modules/comment/comment.service'
-import { DraftService } from '~/modules/draft/draft.service'
-import { FileReferenceType } from '~/modules/file/file-reference.model'
-import { FileReferenceService } from '~/modules/file/file-reference.service'
-import { NoteModel } from '~/modules/note/note.model'
-import { NoteService } from '~/modules/note/note.service'
-import { EventManagerService } from '~/processors/helper/helper.event.service'
-import { ImageMigrationService } from '~/processors/helper/helper.image-migration.service'
-import { ImageService } from '~/processors/helper/helper.image.service'
-import { LexicalService } from '~/processors/helper/helper.lexical.service'
-import { getModelToken } from '~/transformers/model.transformer'
 import {
   afterEach,
   beforeEach,
   describe,
   expect,
   it,
-  vi,
   type Mock,
+  vi,
 } from 'vitest'
+
+import { CannotFindException } from '~/common/exceptions/cant-find.exception'
+import { AiSlugBackfillService } from '~/modules/ai/ai-writer/ai-slug-backfill.service'
+import { CommentService } from '~/modules/comment/comment.service'
+import { DraftService } from '~/modules/draft/draft.service'
+import { FileReferenceType } from '~/modules/file/file-reference.model'
+import { FileReferenceService } from '~/modules/file/file-reference.service'
+import { NoteModel } from '~/modules/note/note.model'
+import { NoteService } from '~/modules/note/note.service'
+import { SlugTrackerService } from '~/modules/slug-tracker/slug-tracker.service'
+import { EventManagerService } from '~/processors/helper/helper.event.service'
+import { ImageService } from '~/processors/helper/helper.image.service'
+import { LexicalService } from '~/processors/helper/helper.lexical.service'
+import { getModelToken } from '~/transformers/model.transformer'
+import { scheduleManager } from '~/utils/schedule.util'
 
 describe('NoteService', () => {
   let noteService: NoteService
   let mockNotes: any[]
   let mockComments: any[]
+  let mockNoteModel: ReturnType<typeof createMockNoteModel>
 
   let mockFileReferenceService: {
     activateReferences: Mock
@@ -47,14 +51,20 @@ describe('NoteService', () => {
     saveImageDimensionsFromMarkdownText: Mock
   }
 
-  let mockImageMigrationService: {
-    migrateImagesToS3: Mock
-  }
-
   let mockDraftService: {
     markAsPublished: Mock
     linkToPublished: Mock
     deleteByRef: Mock
+  }
+
+  let mockSlugTrackerService: {
+    createTracker: Mock
+    findTrackerBySlug: Mock
+    deleteAllTracker: Mock
+  }
+
+  let mockAiSlugBackfillService: {
+    createBackfillTaskForNotes: Mock
   }
 
   let nidCounter: number
@@ -111,6 +121,29 @@ describe('NoteService', () => {
         let note: any = null
         if (query && query.nid !== undefined) {
           note = mockNotes.find((n) => n.nid === query.nid)
+        } else if (query && query.slug) {
+          note = mockNotes.find((n) => {
+            if (n.slug !== query.slug) {
+              return false
+            }
+
+            const createdAt = new Date(n.created).getTime()
+            const gte = query.created?.$gte
+              ? new Date(query.created.$gte).getTime()
+              : undefined
+            const lt = query.created?.$lt
+              ? new Date(query.created.$lt).getTime()
+              : undefined
+
+            if (gte !== undefined && createdAt < gte) {
+              return false
+            }
+            if (lt !== undefined && createdAt >= lt) {
+              return false
+            }
+
+            return true
+          })
         } else if (query && query._id) {
           note = mockNotes.find(
             (n) => n._id === query._id || n.id === query._id,
@@ -178,10 +211,35 @@ describe('NoteService', () => {
         return Promise.resolve({ deletedCount: 0 })
       }),
 
-      countDocuments: vi.fn().mockResolvedValue(mockNotes.length),
+      countDocuments: vi.fn().mockImplementation((query?: any) => {
+        if (query?.slug) {
+          return Promise.resolve(
+            mockNotes.filter((note) => note.slug === query.slug).length,
+          )
+        }
+        return Promise.resolve(mockNotes.length)
+      }),
 
-      updateOne: vi.fn().mockImplementation(() => ({
-        exec: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+      updateOne: vi.fn().mockImplementation((query: any, update: any) => ({
+        exec: vi.fn().mockImplementation(async () => {
+          const note = mockNotes.find(
+            (n) =>
+              n._id === query._id ||
+              n.id === query._id ||
+              n._id === query.id ||
+              n.id === query.id,
+          )
+
+          if (!note) {
+            return { modifiedCount: 0 }
+          }
+
+          if (update?.$set) {
+            Object.assign(note, update.$set)
+          }
+
+          return { modifiedCount: 1 }
+        }),
       })),
 
       paginate: vi.fn().mockImplementation((query: any, options: any) => {
@@ -233,21 +291,25 @@ describe('NoteService', () => {
       saveImageDimensionsFromMarkdownText: vi.fn().mockResolvedValue(undefined),
     }
 
-    mockImageMigrationService = {
-      migrateImagesToS3: vi.fn().mockResolvedValue({
-        newText: '',
-        newImages: [],
-        migratedCount: 0,
-      }),
-    }
-
     mockDraftService = {
       markAsPublished: vi.fn().mockResolvedValue(undefined),
       linkToPublished: vi.fn().mockResolvedValue(undefined),
       deleteByRef: vi.fn().mockResolvedValue(undefined),
     }
 
-    const mockNoteModel = createMockNoteModel()
+    mockSlugTrackerService = {
+      createTracker: vi.fn().mockResolvedValue(undefined),
+      findTrackerBySlug: vi.fn().mockResolvedValue(null),
+      deleteAllTracker: vi.fn().mockResolvedValue(undefined),
+    }
+
+    mockAiSlugBackfillService = {
+      createBackfillTaskForNotes: vi
+        .fn()
+        .mockResolvedValue({ taskId: 'task-1', created: true }),
+    }
+
+    mockNoteModel = createMockNoteModel()
 
     const module = await Test.createTestingModule({
       providers: [
@@ -259,10 +321,6 @@ describe('NoteService', () => {
         {
           provide: ImageService,
           useValue: mockImageService,
-        },
-        {
-          provide: ImageMigrationService,
-          useValue: mockImageMigrationService,
         },
         {
           provide: FileReferenceService,
@@ -287,6 +345,14 @@ describe('NoteService', () => {
             populateText: vi.fn(),
           },
         },
+        {
+          provide: SlugTrackerService,
+          useValue: mockSlugTrackerService,
+        },
+        {
+          provide: AiSlugBackfillService,
+          useValue: mockAiSlugBackfillService,
+        },
       ],
     }).compile()
 
@@ -296,6 +362,7 @@ describe('NoteService', () => {
   afterEach(() => {
     mockNotes = []
     mockComments = []
+    vi.useRealTimers()
     vi.clearAllMocks()
   })
 
@@ -455,6 +522,76 @@ describe('NoteService', () => {
       expect(result.nid).toBeDefined()
     })
 
+    it('should normalize provided slug when creating note', async () => {
+      const result = await noteService.create({
+        title: 'Test Note',
+        text: 'Test content',
+        slug: 'Hello World',
+      } as NoteModel)
+
+      expect(result.slug).toBe('hello-world')
+      expect(
+        mockAiSlugBackfillService.createBackfillTaskForNotes,
+      ).not.toHaveBeenCalled()
+    })
+
+    it('should create note and queue slug backfill task when slug is missing', async () => {
+      vi.spyOn(scheduleManager, 'schedule').mockImplementation((callback) => {
+        callback()
+      })
+
+      const result = await noteService.create({
+        title: 'Title For AI',
+        text: 'Test content',
+      } as NoteModel)
+
+      expect(result.slug).toBeUndefined()
+      expect(mockNoteModel.create).toHaveBeenCalled()
+      expect(
+        mockAiSlugBackfillService.createBackfillTaskForNotes,
+      ).toHaveBeenCalledWith([result.id])
+    })
+
+    it('should continue when slug backfill task enqueue fails', async () => {
+      vi.spyOn(scheduleManager, 'schedule').mockImplementation((callback) => {
+        callback()
+      })
+
+      mockAiSlugBackfillService.createBackfillTaskForNotes.mockRejectedValueOnce(
+        new Error('queue unavailable'),
+      )
+
+      const result = await noteService.create({
+        title: 'Title Without Task',
+        text: 'Test content',
+      } as NoteModel)
+
+      expect(result.slug).toBeUndefined()
+      expect(
+        mockAiSlugBackfillService.createBackfillTaskForNotes,
+      ).toHaveBeenCalledWith([result.id])
+    })
+
+    it('should reject duplicate slug when creating note', async () => {
+      mockNotes.push({
+        _id: 'existing-note',
+        id: 'existing-note',
+        nid: 1,
+        title: 'Existing',
+        text: 'Existing',
+        slug: 'duplicated-slug',
+        created: new Date('2021-01-01'),
+      })
+
+      await expect(
+        noteService.create({
+          title: 'Test Note',
+          text: 'Test content',
+          slug: 'Duplicated Slug',
+        } as NoteModel),
+      ).rejects.toThrow()
+    })
+
     it('should not allow future created date', async () => {
       const futureDate = new Date()
       futureDate.setFullYear(futureDate.getFullYear() + 1)
@@ -542,6 +679,22 @@ describe('NoteService', () => {
 
       expect(mockDraftService.markAsPublished).toHaveBeenCalledWith('draft-123')
     })
+
+    it('should normalize slug and track previous public path when slug changes', async () => {
+      mockNotes[0].slug = 'old-slug'
+      mockNotes[0].created = new Date('2021-01-02T00:00:00.000Z')
+
+      const result = await noteService.updateById('note-1', {
+        slug: 'New Slug',
+      } as Partial<NoteModel>)
+
+      expect(result.slug).toBe('new-slug')
+      expect(mockSlugTrackerService.createTracker).toHaveBeenCalledWith(
+        '/notes/2021/1/2/old-slug',
+        'note',
+        'note-1',
+      )
+    })
   })
 
   describe('deleteById', () => {
@@ -585,6 +738,14 @@ describe('NoteService', () => {
       expect(
         mockFileReferenceService.removeReferencesForDocument,
       ).toHaveBeenCalledWith('note-to-delete', FileReferenceType.Note)
+    })
+
+    it('should delete slug trackers', async () => {
+      await noteService.deleteById('note-to-delete')
+
+      expect(mockSlugTrackerService.deleteAllTracker).toHaveBeenCalledWith(
+        'note-to-delete',
+      )
     })
   })
 

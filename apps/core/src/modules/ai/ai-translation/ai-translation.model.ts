@@ -1,4 +1,5 @@
 import { index, modelOptions, prop } from '@typegoose/typegoose'
+
 import { AI_TRANSLATION_COLLECTION_NAME } from '~/constants/db.constant'
 import { BaseModel } from '~/shared/model/base.model'
 
@@ -32,6 +33,9 @@ export class AITranslationModel extends BaseModel {
   text: string
 
   @prop()
+  subtitle?: string
+
+  @prop()
   summary?: string
 
   @prop({ type: () => [String] })
@@ -58,4 +62,20 @@ export class AITranslationModel extends BaseModel {
 
   @prop()
   content?: string
+
+  @prop({ type: () => [Object] })
+  sourceBlockSnapshots?: Array<{
+    id: string
+    fingerprint: string
+    type: string
+    index: number
+  }>
+
+  @prop({ type: () => Object })
+  sourceMetaHashes?: {
+    title: string
+    subtitle?: string
+    summary?: string
+    tags?: string
+  }
 }

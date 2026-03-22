@@ -24,6 +24,7 @@ export const PROJECT_COLLECTION_NAME = 'projects'
 export const READER_COLLECTION_NAME = 'readers'
 export const RECENTLY_COLLECTION_NAME = 'recentlies'
 export const SAY_COLLECTION_NAME = 'says'
+export const SEARCH_DOCUMENT_COLLECTION_NAME = 'search_documents'
 export const SERVERLESS_LOG_COLLECTION_NAME = 'serverless_logs'
 export const SERVERLESS_STORAGE_COLLECTION_NAME = 'serverless_storages'
 export const SLUG_TRACKER_COLLECTION_NAME = 'slug_trackers'
@@ -41,6 +42,7 @@ export const AI_AGENT_MESSAGE_COLLECTION_NAME = 'ai_agent_messages'
 export const AI_AGENT_ACTION_COLLECTION_NAME = 'ai_agent_actions'
 export const AI_AGENT_RUNTIME_CONFIG_COLLECTION_NAME =
   'ai_agent_runtime_configs'
+export const TRANSLATION_ENTRY_COLLECTION_NAME = 'translation_entries'
 
 export const USER_COLLECTION_NAME = 'users'
 export enum CollectionRefTypes {

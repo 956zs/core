@@ -1,8 +1,10 @@
 import { Injectable, Logger, type OnModuleDestroy } from '@nestjs/common'
+
 import { BizException } from '~/common/exceptions/biz.exception'
 import { ErrorCodeEnum } from '~/constants/error-code.constant'
 import { getRedisKey } from '~/utils/redis.util'
 import { md5 } from '~/utils/tool.util'
+
 import { RedisService } from '../redis/redis.service'
 import {
   TASK_QUEUE_KEYS,
@@ -19,10 +21,10 @@ import {
 } from './task-queue.lua'
 import {
   parseTask,
-  TaskStatus,
   type SubTaskStats,
   type Task,
   type TaskRedis,
+  TaskStatus,
 } from './task-queue.types'
 
 const BATCH_TASK_TYPES = ['ai:translation:batch', 'ai:translation:all']
@@ -47,6 +49,18 @@ export class TaskQueueService implements OnModuleDestroy {
 
   private get redis() {
     return this.redisService.getClient()
+  }
+
+  isRedisReady() {
+    return this.redisService.isReady()
+  }
+
+  getRedisStatus() {
+    return this.redisService.getStatus()
+  }
+
+  isRedisUnavailableError(error: unknown) {
+    return this.redisService.isUnavailableError(error)
   }
 
   private getKey(key: string) {
@@ -206,24 +220,30 @@ export class TaskQueueService implements OnModuleDestroy {
     for (const [err, status] of results) {
       if (err || !status) continue
       switch (status as string) {
-        case TaskStatus.Completed:
+        case TaskStatus.Completed: {
           stats.completed++
           break
-        case TaskStatus.PartialFailed:
+        }
+        case TaskStatus.PartialFailed: {
           stats.partialFailed++
           break
-        case TaskStatus.Failed:
+        }
+        case TaskStatus.Failed: {
           stats.failed++
           break
-        case TaskStatus.Running:
+        }
+        case TaskStatus.Running: {
           stats.running++
           break
-        case TaskStatus.Pending:
+        }
+        case TaskStatus.Pending: {
           stats.pending++
           break
-        case TaskStatus.Cancelled:
+        }
+        case TaskStatus.Cancelled: {
           stats.failed++ // Count cancelled as failed for simplicity
           break
+        }
       }
     }
 

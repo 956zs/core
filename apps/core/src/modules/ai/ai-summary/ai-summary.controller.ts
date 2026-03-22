@@ -6,18 +6,20 @@ import {
   Patch,
   Post,
   Query,
-  Req,
   Res,
 } from '@nestjs/common'
+import type { FastifyReply } from 'fastify'
+
 import { ApiController } from '~/common/decorators/api-controller.decorator'
 import { Auth } from '~/common/decorators/auth.decorator'
 import { CreateSummaryTaskDto } from '~/modules/ai/ai-task/ai-task.dto'
 import { AiTaskService } from '~/modules/ai/ai-task/ai-task.service'
 import { MongoIdDto } from '~/shared/dto/id.dto'
 import { PagerDto } from '~/shared/dto/pager.dto'
-import type { FastifyBizRequest } from '~/transformers/get-req.transformer'
 import { endSse, initSse, sendSseEvent } from '~/utils/sse.util'
-import type { FastifyReply } from 'fastify'
+
+import { DEFAULT_SUMMARY_LANG } from '../ai.constants'
+import { parseLanguageCode } from '../ai-language.util'
 import {
   GetSummariesGroupedQueryDto,
   GetSummaryQueryDto,
@@ -76,13 +78,9 @@ export class AiSummaryController {
   async getArticleSummary(
     @Param() params: MongoIdDto,
     @Query() query: GetSummaryQueryDto,
-    @Req() req: FastifyBizRequest,
   ) {
-    const acceptLanguage = req.headers['accept-language']
-
     return this.service.getOrGenerateSummaryForArticle(params.id, {
-      preferredLang: query.lang,
-      acceptLanguage,
+      lang: query.lang ? parseLanguageCode(query.lang) : DEFAULT_SUMMARY_LANG,
       onlyDb: query.onlyDb,
     })
   }
@@ -91,7 +89,6 @@ export class AiSummaryController {
   async generateArticleSummary(
     @Param() params: MongoIdDto,
     @Query() query: GetSummaryStreamQueryDto,
-    @Req() req: FastifyBizRequest,
     @Res() reply: FastifyReply,
   ) {
     initSse(reply)
@@ -101,12 +98,9 @@ export class AiSummaryController {
       closed = true
     })
 
-    const acceptLanguage = req.headers['accept-language']
-
     try {
       const { events } = await this.service.streamSummaryForArticle(params.id, {
-        preferredLang: query.lang,
-        acceptLanguage,
+        lang: query.lang ? parseLanguageCode(query.lang) : DEFAULT_SUMMARY_LANG,
       })
 
       let sentToken = false

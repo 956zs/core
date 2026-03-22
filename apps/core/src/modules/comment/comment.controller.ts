@@ -10,7 +10,8 @@ import {
   Query,
   UseInterceptors,
 } from '@nestjs/common'
-import type { DocumentType } from '@typegoose/typegoose'
+import { isUndefined, keyBy } from 'es-toolkit/compat'
+
 import { ApiController } from '~/common/decorators/api-controller.decorator'
 import { Auth } from '~/common/decorators/auth.decorator'
 import { CurrentReaderId } from '~/common/decorators/current-user.decorator'
@@ -27,14 +28,11 @@ import { EventManagerService } from '~/processors/helper/helper.event.service'
 import { MongoIdDto } from '~/shared/dto/id.dto'
 import { PagerDto } from '~/shared/dto/pager.dto'
 import { transformDataToPaginate } from '~/transformers/paginate.transformer'
-import { scheduleManager } from '~/utils/schedule.util'
-import { isUndefined, keyBy } from 'es-toolkit/compat'
-import type { Document, QueryFilter } from 'mongoose'
+
 import { ConfigsService } from '../configs/configs.service'
-import { OwnerService } from '../owner/owner.service'
 import { ReaderService } from '../reader/reader.service'
-import { CommentReplyMailType } from './comment.enum'
 import { CommentFilterEmailInterceptor } from './comment.interceptor'
+import { CommentLifecycleService } from './comment.lifecycle.service'
 import type { CommentModel } from './comment.model'
 import { CommentState } from './comment.model'
 import {
@@ -44,23 +42,80 @@ import {
   CommentRefTypesDto,
   CommentStatePatchDto,
   EditCommentDto,
-  TextOnlyDto,
+  ReaderCommentDto,
+  ReaderReplyCommentDto,
+  ReplyCommentDto,
 } from './comment.schema'
 import { CommentService } from './comment.service'
 
 const idempotenceMessage = '哦吼，这句话你已经说过啦'
-const NESTED_REPLY_MAX = 10
 @ApiController({ path: 'comments' })
 @UseInterceptors(CommentFilterEmailInterceptor)
 export class CommentController {
   constructor(
     private readonly commentService: CommentService,
+    private readonly lifecycleService: CommentLifecycleService,
     private readonly eventManager: EventManagerService,
     private readonly configsService: ConfigsService,
-    private readonly ownerService: OwnerService,
     @Inject(forwardRef(() => ReaderService))
     private readonly readerService: ReaderService,
   ) {}
+
+  private async createCommentWithBody(
+    params: MongoIdDto,
+    body: Partial<CommentModel>,
+    isAuthenticated: boolean,
+    ipLocation: IpRecord,
+    query: CommentRefTypesDto,
+  ) {
+    const { ref } = query
+    const id = params.id
+
+    if (
+      !(await this.commentService.allowComment(id, ref)) &&
+      !isAuthenticated
+    ) {
+      throw new BizException(ErrorCodeEnum.CommentForbidden)
+    }
+
+    const model: Partial<CommentModel> = { ...body, ...ipLocation }
+    const comment = await this.commentService.createComment(id, model, ref)
+
+    this.lifecycleService.afterCreateComment(
+      String((comment as any).id || (comment as any)._id),
+      ipLocation,
+      isAuthenticated,
+    )
+
+    return this.commentService
+      .fillAndReplaceAvatarUrl([comment])
+      .then((docs) => docs[0])
+  }
+
+  private async replyCommentWithBody(
+    params: MongoIdDto,
+    body: Partial<CommentModel>,
+    isAuthenticated: boolean,
+    ipLocation: IpRecord,
+  ) {
+    const model: Partial<CommentModel> = {
+      ...body,
+      ...ipLocation,
+      state: isAuthenticated ? CommentState.Read : CommentState.Unread,
+    }
+
+    const comment = await this.commentService.replyComment(params.id, model)
+
+    this.lifecycleService.afterReplyComment(
+      comment,
+      ipLocation,
+      isAuthenticated,
+    )
+
+    return this.commentService
+      .fillAndReplaceAvatarUrl([comment])
+      .then((docs) => docs[0])
+  }
 
   @Get('/')
   @Auth()
@@ -83,6 +138,56 @@ export class CommentController {
     return res
   }
 
+  @Get('/ref/:id')
+  async getCommentsByRefId(
+    @Param() params: MongoIdDto,
+    @Query() query: PagerDto,
+    @Query('hasAnchor') hasAnchor: string,
+    @IsAuthenticated() isAuthenticated: boolean,
+  ) {
+    const { id } = params
+    const { page = 1, size = 10 } = query
+
+    const configs = await this.configsService.get('commentOptions')
+    const { commentShouldAudit } = configs
+
+    const comments = await this.commentService.getCommentsByRefId(id, {
+      page,
+      size,
+      isAuthenticated,
+      commentShouldAudit,
+      hasAnchor: hasAnchor === 'true',
+    })
+
+    const result = transformDataToPaginate(comments)
+    const readerIds = this.commentService.collectThreadReaderIds(comments.docs)
+    const readers = await this.readerService.findReaderInIds(readerIds)
+
+    Object.assign(result, {
+      readers: keyBy(readers, 'id'),
+    })
+
+    return result
+  }
+
+  @Get('/thread/:rootCommentId')
+  async getThreadReplies(
+    @Param('rootCommentId') rootCommentId: string,
+    @Query() query: PagerDto,
+    @Query('cursor') cursor: string,
+    @IsAuthenticated() isAuthenticated: boolean,
+  ) {
+    const { size = 10 } = query
+    const configs = await this.configsService.get('commentOptions')
+
+    return this.commentService.getThreadReplies(rootCommentId, {
+      cursor,
+      size,
+      isAuthenticated,
+      commentShouldAudit: configs.commentShouldAudit,
+    })
+  }
+
   @Get('/:id')
   async getComments(
     @Param() params: MongoIdDto,
@@ -93,7 +198,7 @@ export class CommentController {
       .findOne({
         _id: id,
       })
-      .populate('parent')
+      .populate('parentCommentId')
       .lean()
 
     if (!data) {
@@ -114,135 +219,104 @@ export class CommentController {
     return data
   }
 
-  // 面向 C 端的评论查询接口
-  @Get('/ref/:id')
-  async getCommentsByRefId(
-    @Param() params: MongoIdDto,
-    @Query() query: PagerDto,
-    @IsAuthenticated() isAuthenticated: boolean,
-  ) {
-    const { id } = params
-    const { page = 1, size = 10 } = query
-
-    const configs = await this.configsService.get('commentOptions')
-    const { commentShouldAudit } = configs
-
-    const $and: QueryFilter<CommentModel & Document<any, any, any>>[] = [
-      {
-        parent: undefined,
-        ref: id,
-      },
-      {
-        $or: commentShouldAudit
-          ? [
-              {
-                state: CommentState.Read,
-              },
-            ]
-          : [
-              {
-                state: CommentState.Read,
-              },
-              { state: CommentState.Unread },
-            ],
-      },
-    ]
-
-    if (!isAuthenticated) {
-      $and.push({
-        $or: [
-          { isWhispers: false },
-          {
-            isWhispers: { $exists: false },
-          },
-        ],
-      })
-    }
-    const comments = await this.commentService.model.paginate(
-      {
-        $and,
-      },
-      {
-        limit: size,
-        page,
-        sort: { pin: -1, created: -1 },
-        populate: {
-          path: 'children',
-          maxDepth: NESTED_REPLY_MAX,
-        },
-      },
-    )
-
-    await this.commentService.fillAndReplaceAvatarUrl(comments.docs)
-    this.commentService.cleanDirtyData(comments.docs)
-    const result = transformDataToPaginate(comments)
-    const readerIds = comments.docs
-      .map((comment) => comment.readerId)
-      .filter(Boolean) as string[]
-    const readers = await this.readerService.findReaderInIds(readerIds)
-
-    Object.assign(result, {
-      readers: keyBy(readers, 'id'),
-    })
-
-    return result
-  }
-
-  @Post('/:id')
+  @Post('/guest/:id')
   @HTTPDecorators.Idempotence({
     expired: 20,
     errorMessage: idempotenceMessage,
   })
-  async comment(
+  async guestComment(
     @Param() params: MongoIdDto,
     @Body() body: CommentDto,
     @IsAuthenticated() isAuthenticated: boolean,
     @IpLocation() ipLocation: IpRecord,
     @Query() query: CommentRefTypesDto,
   ) {
-    const { disableComment } = await this.configsService.get('commentOptions')
+    const { allowGuestComment, disableComment } =
+      await this.configsService.get('commentOptions')
     if (disableComment) {
       throw new BizException(ErrorCodeEnum.CommentDisabled)
     }
-    if (!isAuthenticated) {
-      await this.commentService.validAuthorName(body.author)
-    }
-
-    const { ref } = query
-
-    const id = params.id
-    if (
-      !(await this.commentService.allowComment(id, ref)) &&
-      !isAuthenticated
-    ) {
+    if (!allowGuestComment) {
       throw new BizException(ErrorCodeEnum.CommentForbidden)
     }
 
-    const model: Partial<CommentModel> = { ...body, ...ipLocation }
+    await this.commentService.validAuthorName(body.author)
 
-    const comment = await this.commentService.createComment(id, model, ref)
-
-    this.commentService.afterCreateComment(
-      comment.id,
-      ipLocation,
+    return this.createCommentWithBody(
+      params,
+      body,
       isAuthenticated,
+      ipLocation,
+      query,
     )
-
-    return this.commentService
-      .fillAndReplaceAvatarUrl([comment])
-      .then((docs) => docs[0])
   }
 
-  @Post('/reply/:id')
+  @Post('/reader/:id')
   @HTTPDecorators.Idempotence({
     expired: 20,
     errorMessage: idempotenceMessage,
   })
-  async replyByCid(
+  async readerComment(
     @Param() params: MongoIdDto,
-    @Body() body: CommentDto,
-    @Body('author') author: string,
+    @Body() body: ReaderCommentDto,
     @IsAuthenticated() isAuthenticated: boolean,
+    @CurrentReaderId() readerId: string,
+    @IpLocation() ipLocation: IpRecord,
+    @Query() query: CommentRefTypesDto,
+  ) {
+    const { disableComment } = await this.configsService.get('commentOptions')
+    if (disableComment) {
+      throw new BizException(ErrorCodeEnum.CommentDisabled)
+    }
+    if (!readerId) {
+      throw new BizException(ErrorCodeEnum.AuthNotLoggedIn)
+    }
+
+    return this.createCommentWithBody(
+      params,
+      body,
+      isAuthenticated,
+      ipLocation,
+      query,
+    )
+  }
+
+  @Post('/guest/reply/:id')
+  @HTTPDecorators.Idempotence({
+    expired: 20,
+    errorMessage: idempotenceMessage,
+  })
+  async guestReplyByCid(
+    @Param() params: MongoIdDto,
+    @Body() body: ReplyCommentDto,
+    @IsAuthenticated() isAuthenticated: boolean,
+    @IpLocation() ipLocation: IpRecord,
+  ) {
+    const { allowGuestComment, disableComment } =
+      await this.configsService.get('commentOptions')
+    if (disableComment) {
+      throw new BizException(ErrorCodeEnum.CommentDisabled)
+    }
+
+    if (!allowGuestComment) {
+      throw new BizException(ErrorCodeEnum.CommentForbidden)
+    }
+
+    await this.commentService.validAuthorName(body.author)
+
+    return this.replyCommentWithBody(params, body, isAuthenticated, ipLocation)
+  }
+
+  @Post('/reader/reply/:id')
+  @HTTPDecorators.Idempotence({
+    expired: 20,
+    errorMessage: idempotenceMessage,
+  })
+  async readerReplyByCid(
+    @Param() params: MongoIdDto,
+    @Body() body: ReaderReplyCommentDto,
+    @IsAuthenticated() isAuthenticated: boolean,
+    @CurrentReaderId() readerId: string,
     @IpLocation() ipLocation: IpRecord,
   ) {
     const { disableComment } = await this.configsService.get('commentOptions')
@@ -250,131 +324,11 @@ export class CommentController {
       throw new BizException(ErrorCodeEnum.CommentDisabled)
     }
 
-    if (!isAuthenticated) {
-      await this.commentService.validAuthorName(author)
+    if (!readerId) {
+      throw new BizException(ErrorCodeEnum.AuthNotLoggedIn)
     }
 
-    const { id } = params
-
-    const parent = await this.commentService.model.findById(id).populate('ref')
-    if (!parent) {
-      throw new CannotFindException()
-    }
-    const commentIndex = parent.commentsIndex
-
-    if (parent.key && parent.key.split('#').length >= NESTED_REPLY_MAX) {
-      throw new BizException(ErrorCodeEnum.CommentTooDeep)
-    }
-
-    const key = `${parent.key}#${commentIndex}`
-
-    const model: Partial<CommentModel> = {
-      parent,
-      ref: (parent.ref as DocumentType<any>)._id,
-      refType: parent.refType,
-      ...body,
-      ...ipLocation,
-      key,
-      isWhispers: parent.isWhispers,
-      state: isAuthenticated ? CommentState.Read : CommentState.Unread,
-    }
-
-    await this.commentService.assignReaderToComment(model)
-
-    const comment = await this.commentService.model.create(model)
-    const commentId = comment._id.toString()
-    scheduleManager.schedule(async () => {
-      if (isAuthenticated) {
-        return
-      }
-      await this.commentService.appendIpLocation(commentId, ipLocation.ip)
-    })
-
-    await parent.updateOne({
-      $push: {
-        children: comment._id,
-      },
-      $inc: {
-        commentsIndex: 1,
-      },
-      state:
-        comment.state === CommentState.Read &&
-        parent.state !== CommentState.Read
-          ? CommentState.Read
-          : parent.state,
-    })
-    if (isAuthenticated) {
-      this.commentService.sendEmail(comment, CommentReplyMailType.Guest)
-      this.eventManager.broadcast(BusinessEvents.COMMENT_CREATE, comment, {
-        scope: EventScope.TO_SYSTEM_VISITOR,
-      })
-    } else {
-      const configs = await this.configsService.get('commentOptions')
-      const { commentShouldAudit } = configs
-
-      if (commentShouldAudit) {
-        this.eventManager.broadcast(BusinessEvents.COMMENT_CREATE, comment, {
-          scope: EventScope.TO_SYSTEM_ADMIN,
-        })
-        return
-      }
-
-      this.commentService.sendEmail(comment, CommentReplyMailType.Owner)
-      this.eventManager.broadcast(BusinessEvents.COMMENT_CREATE, comment, {
-        scope: EventScope.ALL,
-      })
-    }
-    return this.commentService
-      .fillAndReplaceAvatarUrl([comment])
-      .then((docs) => docs[0])
-  }
-
-  @Post('/owner/comment/:id')
-  @Auth()
-  @HTTPDecorators.Idempotence({
-    expired: 20,
-    errorMessage: idempotenceMessage,
-  })
-  async commentByOwner(
-    @Param() params: MongoIdDto,
-    @Body() body: TextOnlyDto,
-    @IpLocation() ipLocation: IpRecord,
-    @Query() query: CommentRefTypesDto,
-  ) {
-    const owner = await this.ownerService.getOwner()
-    const { name, mail, url } = owner
-    const model: CommentDto = {
-      author: name,
-      ...body,
-      mail,
-      url,
-      state: CommentState.Read,
-    } as CommentDto
-    return await this.comment(params, model as any, true, ipLocation, query)
-  }
-
-  @Post('/owner/reply/:id')
-  @Auth()
-  @HTTPDecorators.Idempotence({
-    expired: 20,
-    errorMessage: idempotenceMessage,
-  })
-  async replyByOwner(
-    @Param() params: MongoIdDto,
-    @Body() body: TextOnlyDto,
-    @IpLocation() ipLocation: IpRecord,
-  ) {
-    const owner = await this.ownerService.getOwner()
-    const { name, mail, url } = owner
-    const model: CommentDto = {
-      author: name,
-      ...body,
-      mail,
-      url,
-      state: CommentState.Read,
-    } as CommentDto
-    // @ts-ignore
-    return await this.replyByCid(params, model, undefined, true, ipLocation)
+    return this.replyCommentWithBody(params, body, isAuthenticated, ipLocation)
   }
 
   @Patch('/:id')
@@ -430,7 +384,7 @@ export class CommentController {
   @Auth()
   async deleteComment(@Param() params: MongoIdDto) {
     const { id } = params
-    await this.commentService.deleteComments(id)
+    await this.commentService.softDeleteComment(id)
     await this.eventManager.emit(
       BusinessEvents.COMMENT_DELETE,
       { id },
@@ -475,11 +429,11 @@ export class CommentController {
       }
       const comments = await this.commentService.model.find(filter).lean()
       for (const comment of comments) {
-        await this.commentService.deleteComments(comment._id.toString())
+        await this.commentService.softDeleteComment(comment._id.toString())
       }
     } else if (ids?.length) {
       for (const id of ids) {
-        await this.commentService.deleteComments(id)
+        await this.commentService.softDeleteComment(id)
       }
     }
 

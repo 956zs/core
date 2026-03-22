@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { CronExpression } from '@nestjs/schedule'
+
 import { CronOnce } from '~/common/decorators/cron-once.decorator'
+
 import { CronTaskService } from './cron-task.service'
 import { CronTaskType } from './cron-task.types'
 
@@ -91,25 +93,14 @@ export class CronTaskScheduler {
     )
   }
 
-  @CronOnce(CronExpression.EVERY_HOUR, { name: 'cleanupOrphanImages' })
-  async scheduleCleanupOrphanImages() {
-    this.logger.log('Scheduling cleanupOrphanImages task')
+  @CronOnce(CronExpression.EVERY_DAY_AT_4AM, { name: 'rebuildSearchIndex' })
+  async scheduleRebuildSearchIndex() {
+    this.logger.log('Scheduling rebuildSearchIndex task')
     const result = await this.cronTaskService.createCronTask(
-      CronTaskType.CleanupOrphanImages,
+      CronTaskType.RebuildSearchIndex,
     )
     this.logger.log(
-      `cleanupOrphanImages task ${result.created ? 'created' : 'already exists'}: ${result.taskId}`,
-    )
-  }
-
-  @CronOnce(CronExpression.EVERY_HOUR, { name: 'syncPublishedImagesToS3' })
-  async scheduleSyncPublishedImagesToS3() {
-    this.logger.log('Scheduling syncPublishedImagesToS3 task')
-    const result = await this.cronTaskService.createCronTask(
-      CronTaskType.SyncPublishedImagesToS3,
-    )
-    this.logger.log(
-      `syncPublishedImagesToS3 task ${result.created ? 'created' : 'already exists'}: ${result.taskId}`,
+      `rebuildSearchIndex task ${result.created ? 'created' : 'already exists'}: ${result.taskId}`,
     )
   }
 }

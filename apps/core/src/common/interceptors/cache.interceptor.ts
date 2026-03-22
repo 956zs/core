@@ -5,7 +5,11 @@ import type {
 } from '@nestjs/common'
 import { Inject, Injectable, Logger, RequestMethod } from '@nestjs/common'
 import { HttpAdapterHost, Reflector } from '@nestjs/core'
+import type { FastifyReply } from 'fastify'
+import { Observable, of, tap } from 'rxjs'
+
 import { HTTP_CACHE, REDIS } from '~/app.config'
+import { RequestContext } from '~/common/contexts/request.context'
 import { API_CACHE_PREFIX } from '~/constants/cache.constant'
 import * as META from '~/constants/meta.constant'
 import * as SYSTEM from '~/constants/system.constant'
@@ -13,8 +17,6 @@ import { isTest } from '~/global/env.global'
 import { CacheService } from '~/processors/redis/cache.service'
 import { getNestExecutionContextRequest } from '~/transformers/get-req.transformer'
 import { hashString } from '~/utils/tool.util'
-import type { FastifyReply } from 'fastify'
-import { Observable, of, tap } from 'rxjs'
 
 @Injectable()
 export class HttpCacheInterceptor implements NestInterceptor {
@@ -69,7 +71,12 @@ export class HttpCacheInterceptor implements NestInterceptor {
     const ttl = metaTTL || HTTP_CACHE.ttl
 
     try {
-      const value = await this.cacheManager.get(key)
+      const value = await Promise.race([
+        this.cacheManager.get(key),
+        new Promise<undefined>((resolve) =>
+          setTimeout(() => resolve(undefined), 3000),
+        ),
+      ])
 
       if (value) {
         this.logger.debug(`hit cache:${key}`)
@@ -87,7 +94,7 @@ export class HttpCacheInterceptor implements NestInterceptor {
             }),
           )
     } catch (error) {
-      console.error(error)
+      this.logger.warn(`Cache get failed for key=${key}: ${error}`)
       return call$
     }
   }
@@ -152,7 +159,9 @@ export class HttpCacheInterceptor implements NestInterceptor {
     }
 
     const queryString = this.getRequest(context).url.split('?')[1]
-    return queryString ? `${key}?${hashString(queryString)}` : key
+    const lang = RequestContext.currentLang()
+    const base = queryString ? `${key}?${hashString(queryString)}` : key
+    return lang ? `${base}#${lang}` : base
   }
 
   private fallbackKey(context: ExecutionContext): string {

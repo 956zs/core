@@ -1,3 +1,6 @@
+import { createZodDto } from 'nestjs-zod'
+import { z } from 'zod'
+
 import {
   zArrayUnique,
   zCoerceInt,
@@ -5,12 +8,12 @@ import {
   zMongoId,
   zNonEmptyString,
   zPinDate,
+  zPrefer,
 } from '~/common/zod'
 import { PagerSchema } from '~/shared/dto/pager.dto'
 import { WriteBaseSchema } from '~/shared/schema'
 import { ImageSchema } from '~/shared/schema/image.schema'
-import { createZodDto } from 'nestjs-zod'
-import { z } from 'zod'
+import { ContentFormat } from '~/shared/types/content-format.type'
 
 /**
  * Post schema for API validation
@@ -39,8 +42,16 @@ export class PostDto extends createZodDto(PostSchema) {}
 
 /**
  * Partial post schema for PATCH operations
+ * Override fields with .default() to prevent defaults from being applied during partial updates
  */
-export const PartialPostSchema = PostSchema.partial()
+export const PartialPostSchema = PostSchema.extend({
+  contentFormat: z
+    .enum([ContentFormat.Markdown, ContentFormat.Lexical])
+    .optional(),
+  meta: z.record(z.string(), z.any()).optional().nullable(),
+  copyright: z.boolean().optional(),
+  isPublished: z.boolean().optional(),
+}).partial()
 
 export class PartialPostDto extends createZodDto(PartialPostSchema) {}
 
@@ -64,6 +75,7 @@ export class CategoryAndSlugDto extends createZodDto(CategoryAndSlugSchema) {}
  */
 export const PostDetailQuerySchema = z.object({
   lang: zLang,
+  prefer: zPrefer,
 })
 
 export class PostDetailQueryDto extends createZodDto(PostDetailQuerySchema) {}

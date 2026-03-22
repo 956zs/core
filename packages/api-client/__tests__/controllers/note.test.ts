@@ -1,9 +1,10 @@
+import { vi } from 'vitest'
+
 import { mockRequestInstance } from '~/__tests__/helpers/instance'
 import { mockResponse } from '~/__tests__/helpers/response'
 import { axiosAdaptor } from '~/adaptors/axios'
 import { NoteController } from '~/controllers'
 import { RequestError } from '~/core'
-import { vi } from 'vitest'
 
 const { spyOn } = vi
 
@@ -42,9 +43,11 @@ describe('test note client', () => {
       data: [
         {
           id: '1',
+          slug: 'note-1',
         },
         {
           id: '2',
+          slug: 'note-2',
         },
       ],
       size: 2,
@@ -54,9 +57,11 @@ describe('test note client', () => {
       data: [
         {
           id: '1',
+          slug: 'note-1',
         },
         {
           id: '2',
+          slug: 'note-2',
         },
       ],
       size: 2,
@@ -84,6 +89,13 @@ describe('test note client', () => {
 
     const data = await client.note.getNoteById(1, undefined, true)
     expect(data.title).toBe('1')
+  })
+
+  it('should get note by date and slug', async () => {
+    mockResponse('/notes/2023/1/17/note-2', { data: { title: '1' } })
+
+    const data = await client.note.getNoteBySlugDate(2023, 1, 17, 'note-2')
+    expect(data.data.title).toBe('1')
   })
 
   it('should forbidden if no password provide', async () => {

@@ -1,5 +1,7 @@
 import { URL } from 'node:url'
+
 import { Injectable } from '@nestjs/common'
+
 import type { CategoryModel } from '~/modules/category/category.model'
 import { ConfigsService } from '~/modules/configs/configs.service'
 import type { NoteModel } from '~/modules/note/note.model'
@@ -12,7 +14,10 @@ export class UrlBuilderService {
   constructor(private readonly configsService: ConfigsService) {}
   isPostModel(model: any): model is PostModel {
     return (
-      isDefined(model.title) && isDefined(model.slug) && !isDefined(model.order)
+      isDefined(model.title) &&
+      isDefined(model.slug) &&
+      !isDefined(model.order) &&
+      !isDefined(model.nid)
     )
   }
 
@@ -27,14 +32,14 @@ export class UrlBuilderService {
   }
 
   build(model: PostModel | NoteModel | PageModel) {
-    if (this.isPostModel(model)) {
+    if (this.isNoteModel(model)) {
+      return `/notes/${model.nid}`
+    } else if (this.isPostModel(model)) {
       return `/posts/${
         (model.category as CategoryModel).slug
       }/${encodeURIComponent(model.slug)}`
     } else if (this.isPageModel(model)) {
       return `/${model.slug}`
-    } else if (this.isNoteModel(model)) {
-      return `/notes/${model.nid}`
     }
 
     return '/'

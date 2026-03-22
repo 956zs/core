@@ -4,6 +4,8 @@ export const generateDefaultConfig: () => IConfig = () => ({
   seo: {
     title: '我的小世界呀',
     description: '哈喽~欢迎光临',
+    icon: '',
+    iconDark: '',
     keywords: [],
   },
   url: {
@@ -36,6 +38,7 @@ export const generateDefaultConfig: () => IConfig = () => ({
     aiReviewThreshold: 5,
     testAiReview: '__action__',
     disableComment: false,
+    allowGuestComment: true,
     blockIps: [],
     disableNoChinese: false,
     recordIpLocation: true,
@@ -64,8 +67,6 @@ export const generateDefaultConfig: () => IConfig = () => ({
   },
   imageStorageOptions: {
     enable: false,
-    syncOnPublish: false,
-    deleteLocalAfterSync: false,
     endpoint: null!,
     secretId: null!,
     secretKey: null!,
@@ -74,15 +75,13 @@ export const generateDefaultConfig: () => IConfig = () => ({
     customDomain: '',
     prefix: '',
   },
+  fileUploadOptions: {
+    enableCustomNaming: false,
+    filenameTemplate: '{Y}{m}{d}/{md5-16}{ext}',
+    pathTemplate: '{type}',
+  },
   baiduSearchOptions: { enable: false, token: null! },
   bingSearchOptions: { enable: false, token: null! },
-  algoliaSearchOptions: {
-    enable: false,
-    apiKey: '',
-    appId: '',
-    indexName: '',
-    maxTruncateSize: 10000,
-  },
   adminExtra: {
     enableAdminProxy: true,
 
@@ -106,7 +105,7 @@ export const generateDefaultConfig: () => IConfig = () => ({
     commentReviewModel: undefined,
     enableSummary: false,
     enableAutoGenerateSummary: false,
-    aiSummaryTargetLanguage: 'auto',
+    summaryTargetLanguages: [],
   },
   oauth: {
     providers: [],
